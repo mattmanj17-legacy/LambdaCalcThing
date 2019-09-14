@@ -42,7 +42,7 @@ lambdaArgRefReplacedWithLambda 1 arg (DAR 1) =
 lambdaArgRefReplacedWithLambda 1 _ (DAR argRef) =
   (DAR (argRef - 1))
 lambdaArgRefReplacedWithLambda argRefReplace arg (DAR argRef)
-  | argRefReplace == argRef = lambdaIncrementedArgRefsGreaterThan arg 1 argRef
+  | argRefReplace == argRef = lambdaIncrementedArgRefsGreaterThanOrEqual arg 1 argRef
   | otherwise = (DAR argRef)
 lambdaArgRefReplacedWithLambda argRefReplace arg (DAB body) =
   (DAB (lambdaArgRefReplacedWithLambda (argRefReplace+1) arg body))
@@ -52,14 +52,14 @@ lambdaArgRefReplacedWithLambda argRefReplace argReplace (DAP func arg) =
     (lambdaArgRefReplacedWithLambda argRefReplace argReplace arg)
   )
   
-lambdaIncrementedArgRefsGreaterThan :: Debrujin -> Int -> Int -> Debrujin
-lambdaIncrementedArgRefsGreaterThan lar@(DAR argRef) argRefPatchMin argRefReplacing
-  | argRef <= argRefPatchMin = lar
+lambdaIncrementedArgRefsGreaterThanOrEqual :: Debrujin -> Int -> Int -> Debrujin
+lambdaIncrementedArgRefsGreaterThanOrEqual lar@(DAR argRef) argRefPatchMin argRefReplacing
+  | argRef < argRefPatchMin = lar
   | otherwise = (DAR (argRef + argRefReplacing - 1))
-lambdaIncrementedArgRefsGreaterThan (DAB func) argRefPatchMin argRefReplacing =
-  (DAB (lambdaIncrementedArgRefsGreaterThan func (argRefPatchMin + 1) argRefReplacing))
-lambdaIncrementedArgRefsGreaterThan (DAP func arg) argRefPatchMin argRefReplacing =
+lambdaIncrementedArgRefsGreaterThanOrEqual (DAB func) argRefPatchMin argRefReplacing =
+  (DAB (lambdaIncrementedArgRefsGreaterThanOrEqual func (argRefPatchMin + 1) argRefReplacing))
+lambdaIncrementedArgRefsGreaterThanOrEqual (DAP func arg) argRefPatchMin argRefReplacing =
   (DAP 
-    (lambdaIncrementedArgRefsGreaterThan func argRefPatchMin argRefReplacing)
-    (lambdaIncrementedArgRefsGreaterThan arg argRefPatchMin argRefReplacing)
+    (lambdaIncrementedArgRefsGreaterThanOrEqual func argRefPatchMin argRefReplacing)
+    (lambdaIncrementedArgRefsGreaterThanOrEqual arg argRefPatchMin argRefReplacing)
   )

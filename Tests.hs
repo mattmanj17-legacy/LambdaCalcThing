@@ -115,32 +115,9 @@ main = hspec $ do
     multExprTest 0 0
     multExprTest 0 1
     multExprTest 1 0
-
-    it "multDebug" $ do 
-      (shouldBe
-          (lambdaIncrementedArgRefsGreaterThan (DAR 1) 1 2)
-        )
-      --(shouldBe
-      --    (lambdaBetaReducedOneStep (parseDebrujinUnsafe "((/ (/ (2 1))) 1)"))
-      --    (parseDebrujinUnsafe "(/ (2 1))")
-      --  )
-      --(shouldBe
-      --    (lambdaBetaReducedOneStep (parseDebrujinUnsafe "(/ (/ (((/ (/ (2 1))) 1) 1)))")) 
-      --    (parseDebrujinUnsafe "(/ (/ ((/ (2 1)) 1)))")
-      --  )
-      --(shouldBe
-      --    (lambdaBetaReducedOneStep (parseDebrujinUnsafe "(/ ((/ (/ (2 1))) ((/ (/ (2 1))) 1)))"))
-      --    (parseDebrujinUnsafe "(/ (/ (2 ((/ (/ (2 1))) 2))))")
-      --  )
-      --(shouldBe
-      --    (reduceStrOnce "(/ g ((/ f (/ x (f x))) ((/ f (/ x (f x))) g)))")
-      --    (anonStr "(/ g (/ x (((/ fa (/ xa (fa xa))) g) x)))")
-      --  )
-      --(lambdaBetaReducedFull (anonStr "(((/ m (/ n (/ g (m (n g))))) (/ f (/ x (f x)))) (/ f (/ x (f x))))")) `shouldBe` (anonStr "(/ f (/ x (f x)))")
-      --(lambdaBetaReducedFull (multExpr 1 1)) `shouldBe` (churchNum 1)
-
-    --multExprTest 1 1
-    --multExprTest 1 2
-    --multExprTest 2 1
-    --multExprTest 3 2
-    --multExprTest 2 3
+    
+    multExprTest 1 1
+    multExprTest 1 2
+    multExprTest 2 1
+    multExprTest 3 2
+    multExprTest 2 3
