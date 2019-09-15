@@ -1,6 +1,10 @@
 {-# OPTIONS_GHC -Wall #-}
 
-module LambdaToDebrujin where
+module LambdaToDebrujin 
+(
+  lambdaBoundVarsAnonymized
+)
+where
 
 import Lambda
 import Debrujin
