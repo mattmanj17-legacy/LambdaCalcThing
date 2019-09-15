@@ -7,13 +7,15 @@ import Test.Hspec
 import ParseCommon
 
 import Lambda
-import ParseLambda
 
 import Debrujin
 import ReduceDebrujin
-import ParseDebrujin
+
+import ParseLambdaLike
 
 import LambdaToDebrujin
+
+import Text.ParserCombinators.Parsec
 
 fromRightUnsafe :: Either a b -> b
 fromRightUnsafe (Right b) = b
@@ -80,9 +82,75 @@ multExprTest a b =
   it ("multExprTest " ++ show a ++ " " ++ show b) $ do 
     (lambdaBetaReducedFull (multExpr a b)) `shouldBe` (churchNum (a * b))
 
+parseLambdaLikeTest :: String -> SimpleParser a -> SimpleParser b -> String -> SpecWith ()
+parseLambdaLikeTest strType parseArg parsePre strInput =
+  it ("parseLambdaLikeTest " ++ strType ++ " " ++ strInput) $ do 
+    (parseLambdaLikeCustom strInput) `shouldBe` (Right ())
+  where
+    parseLambdaLikeCustom =
+      parseFromStr $
+        parseLambdaLike $
+          LambdaLikeParseConfig 
+            { parseArgFn=(parseArg) 
+            , crunchArg=(const ()) 
+            , crunchApp=(\_ _ -> ()) 
+            , parsePreAbs=(parsePre) 
+            , crunchAbs=(\_ _ -> ()) 
+            }
+        
+parseNullTest :: String -> SpecWith ()
+parseNullTest = parseLambdaLikeTest "null" (return ()) (return ())
+        
+parseABTest :: String -> SpecWith ()
+parseABTest = parseLambdaLikeTest "null" (char 'a') (char 'b')
+        
+parseATest :: String -> SpecWith ()
+parseATest = parseLambdaLikeTest "null" (char 'a') (return ())
+        
+parseBTest :: String -> SpecWith ()
+parseBTest = parseLambdaLikeTest "null" (return ()) (char 'b')
+
 main :: IO ()
 main = hspec $ do
   describe "lambda" $ do
+    parseNullTest "()"
+    parseNullTest "(/)"
+    parseNullTest "(())"
+    parseNullTest "(() ())"
+    parseNullTest "(/ ())"
+    parseNullTest "(/ (/))"
+    parseNullTest "((((()())))())"
+    parseNullTest "((/((/(/))))(/))"
+
+    parseABTest "(a a)"
+    parseABTest "(/ b a)"
+    parseABTest "((a a) a)"
+    parseABTest "(a (a a))"
+    parseABTest "((a a) (a a))"
+    parseABTest "(/ b (a a))"
+    parseABTest "(/ b (/ b a))"
+    parseABTest "(((((a a)(a a)) a) a)(a a))"
+    parseABTest "((/ b ((/ b (/ b a)) a))(/ b a))"
+
+    parseATest "(a a)"
+    parseATest "(/ a)"
+    parseATest "((a a) a)"
+    parseATest "(a (a a))"
+    parseATest "((a a) (a a))"
+    parseATest "(/ (a a))"
+    parseATest "(/ (/ a))"
+    parseATest "(((((a a)(a a)) a) a)(a a))"
+    parseATest "((/ ((/ (/ a)) a))(/ a))"
+
+    parseBTest "()"
+    parseBTest "(/ b)"
+    parseBTest "(())"
+    parseBTest "(()())"
+    parseBTest "(/ b ())"
+    parseBTest "(/ b (/ b))"
+    parseBTest "((((()())))())"
+    parseBTest "((/ b ((/ b (/ b))))(/ b))"
+
     parseLambdaTest "(/ x x)" (LAB "x" (LAR "x"))
     parseLambdaTest "(/ x y)" (LAB "x" (LAR "y"))
     parseLambdaTest "(/ y (/ x (x y)))" (LAB "y" (LAB "x" (LAP (LAR "x") (LAR "y"))))

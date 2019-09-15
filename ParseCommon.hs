@@ -8,17 +8,19 @@ import Text.Parsec.Prim
 
 import Data.Functor.Identity
 
-parseWhiteSpace :: a -> GenParser Char st a
+type SimpleParser result = GenParser Char () result
+
+parseWhiteSpace :: a -> SimpleParser a
 parseWhiteSpace a = do
   _ <- many (oneOf ['\x20','\x0D','\x0A','\x09'])
   return a
 
-wrapWs :: GenParser Char st a -> GenParser Char st a
+wrapWs :: SimpleParser a -> SimpleParser a
 wrapWs parser = do
   parseWhiteSpace ()
   res <- parser
   parseWhiteSpace ()
   return res
 
-parseFromStr :: Text.Parsec.Prim.Stream s Data.Functor.Identity.Identity t => Text.Parsec.Prim.Parsec s () a -> s -> Either ParseError a
+parseFromStr :: Stream s Identity t => Parsec s () a -> s -> Either ParseError a
 parseFromStr parseFn = parse parseFn "unknown"
