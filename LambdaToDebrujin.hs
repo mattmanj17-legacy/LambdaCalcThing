@@ -5,6 +5,8 @@ module LambdaToDebrujin where
 import Lambda
 import Debrujin
 
+import Data.Maybe
+
 lambdaBoundVarsAnonymized :: Lambda -> Maybe Debrujin
 lambdaBoundVarsAnonymized = lambdaVarReplacedWithArgRefs []
 
@@ -15,10 +17,15 @@ lambdaVarReplacedWithArgRefs :: [(String, Int)] -> Lambda -> Maybe Debrujin
 lambdaVarReplacedWithArgRefs replacements (LAR str) = do
   replacement <- lookup str replacements
   return (DAR replacement)
-lambdaVarReplacedWithArgRefs replacements (LAB str body) = do
-  let newReplacements = (str, 1):(incReplacements replacements)
-  newBody <- lambdaVarReplacedWithArgRefs newReplacements body
-  return (DAB newBody)
+
+lambdaVarReplacedWithArgRefs replacements (LAB str body) =
+  if isJust (lookup str replacements) then
+    Nothing
+  else do
+    let newReplacements = (str, 1):(incReplacements replacements)
+    newBody <- lambdaVarReplacedWithArgRefs newReplacements body
+    return (DAB newBody)
+
 lambdaVarReplacedWithArgRefs replacements (LAP func arg) = do
   newFunc <- lambdaVarReplacedWithArgRefs replacements func
   newArg <- lambdaVarReplacedWithArgRefs replacements arg
