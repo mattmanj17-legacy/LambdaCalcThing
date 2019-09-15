@@ -1,21 +1,15 @@
 {-# OPTIONS_GHC -Wall #-}
 
 import Data.Maybe
-
 import Test.Hspec
+import Text.ParserCombinators.Parsec
 
 import ParseCommon
-
 import Lambda
-
 import Debrujin
 import ReduceDebrujin
-
 import ParseLambdaLike
-
 import LambdaToDebrujin
-
-import Text.ParserCombinators.Parsec
 
 fromRightUnsafe :: Either a b -> b
 fromRightUnsafe (Right b) = b
@@ -53,34 +47,28 @@ reduceOnceTest start expect =
    it ("reduceOnceTest " ++ show start) $ do
     (lambdaBetaReducedOneStep start) `shouldBe` expect
 
+churchNum :: Int -> Debrujin
+churchNum n = (DAB (DAB (churchNumHelper n)))
+  where
+    churchNumHelper 0 = (DAR 1)
+    churchNumHelper m = (DAP (DAR 2) (churchNumHelper (m-1)))
+
+binIntOpTest :: String -> Debrujin -> (Int -> Int -> Int) -> Int -> Int -> SpecWith ()
+binIntOpTest strType expr op a b =
+  it ("binIntOpTest " ++ strType ++ " " ++ show a ++ " " ++ show b) $ do 
+    (lambdaBetaReducedFull (DAP (DAP expr (churchNum a)) (churchNum b))) `shouldBe` (churchNum (op a b))
+
 plusOperator :: Debrujin
 plusOperator = (DAB (DAB (DAB (DAB (DAP (DAP (DAR 4) (DAR 2)) (DAP (DAP (DAR 3) (DAR 2)) (DAR 1)))))))
 
-addExpr :: Int -> Int -> Debrujin
-addExpr a b = DAP (DAP plusOperator (churchNum a)) (churchNum b)
-
 addExprTest :: Int -> Int -> SpecWith ()
-addExprTest a b =
-  it ("addExprTest " ++ show a ++ " " ++ show b)$ do 
-    (lambdaBetaReducedFull (addExpr a b)) `shouldBe` (churchNum (a + b))
-
-churchNum :: Int -> Debrujin
-churchNum n = (DAB (DAB (churchNumHelper n)))
-
-churchNumHelper :: Int -> Debrujin
-churchNumHelper 0 = (DAR 1)
-churchNumHelper n = (DAP (DAR 2) (churchNumHelper (n-1)))
+addExprTest = binIntOpTest "add" plusOperator (+)
 
 multOperator :: Debrujin
 multOperator = (anonStr "(/ m (/ n (/ g (m (n g)))))")
 
-multExpr :: Int -> Int -> Debrujin
-multExpr a b = DAP (DAP multOperator (churchNum a)) (churchNum b)
-
 multExprTest :: Int -> Int -> SpecWith ()
-multExprTest a b =
-  it ("multExprTest " ++ show a ++ " " ++ show b) $ do 
-    (lambdaBetaReducedFull (multExpr a b)) `shouldBe` (churchNum (a * b))
+multExprTest = binIntOpTest "mul" multOperator (*)
 
 parseLambdaLikeTest :: String -> SimpleParser a -> SimpleParser b -> String -> SpecWith ()
 parseLambdaLikeTest strType parseArg parsePre strInput =
