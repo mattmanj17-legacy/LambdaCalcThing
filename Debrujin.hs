@@ -6,9 +6,9 @@ data Debrujin =
   DAR Int |
   DAB Debrujin |
   DAP Debrujin Debrujin
-  deriving(Eq)
+  deriving(Show, Eq)
 
-instance Show Debrujin where
-  show (DAR argRef) = show argRef
-  show (DAB body) = "(/ " ++ show body ++ ")"
-  show (DAP func arg) = "(" ++ show func ++ " " ++ show arg ++ ")"
+unParseDebrujin :: Debrujin -> String
+unParseDebrujin (DAR argRef) = show argRef
+unParseDebrujin (DAB body) = "(/ " ++ unParseDebrujin body ++ ")"
+unParseDebrujin (DAP func arg) = "(" ++ unParseDebrujin func ++ " " ++ unParseDebrujin arg ++ ")"

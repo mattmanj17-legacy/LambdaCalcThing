@@ -6,9 +6,9 @@ data Lambda =
   LAR String |
   LAB String Lambda |
   LAP Lambda Lambda
-  deriving(Eq)
+  deriving(Show, Eq)
 
-instance Show Lambda where
-  show (LAR str) = str
-  show (LAB str body) = "(/ " ++ str ++ " " ++ show body ++ ")"
-  show (LAP func arg) = "(" ++ show func ++ " " ++ show arg ++ ")"
+unParseLambda :: Lambda -> String
+unParseLambda (LAR str) = str
+unParseLambda (LAB str body) = "(/ " ++ str ++ " " ++ unParseLambda body ++ ")"
+unParseLambda (LAP func arg) = "(" ++ unParseLambda func ++ " " ++ unParseLambda arg ++ ")"
