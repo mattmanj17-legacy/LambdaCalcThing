@@ -26,13 +26,6 @@ lambdaBetaReducedFull term
   where
     reducedOnce = lambdaBetaReducedOneStep term
 
-lambdaBetaReducedSteps :: [Debrujin] -> Debrujin -> [Debrujin]
-lambdaBetaReducedSteps cur term
-  | term == reducedOnce = (term:cur)
-  | otherwise = lambdaBetaReducedSteps (term:cur) reducedOnce
-  where
-    reducedOnce = lambdaBetaReducedOneStep term
-
 lambdaAppliedTo :: Debrujin -> Debrujin -> Debrujin
 lambdaAppliedTo = lambdaArgRefReplacedWithLambda 1
 
