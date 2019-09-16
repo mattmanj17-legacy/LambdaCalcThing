@@ -13,7 +13,7 @@ import ReduceDebrujin
 
 reduceOnceTest :: String -> Debrujin -> Debrujin -> SpecWith ()
 reduceOnceTest strId start expect =
-   it ("reduceOnceTest " ++ strId) $ do
+  it ("reduceOnceTest " ++ strId) $ do
     (lambdaBetaReducedOneStep start) `shouldBe` expect
 
 churchNum :: Int -> Debrujin
@@ -34,7 +34,15 @@ multOperator = (DAB (DAB (DAB (DAP (DAR 3) (DAP (DAR 2) (DAR 1))))))
 multExprTest = binIntOpTest "mul" multOperator (*)
 
 powOperator = (DAB (DAB (DAB (DAB (DAP (DAP (DAP (DAR 3) (DAR 4)) (DAR 2)) (DAR 1))))))
-powExprTest = binIntOpTest "pow" multOperator (^)
+powExprTest = binIntOpTest "pow" powOperator (^)
+
+predOperator = 
+  (DAB (DAB (DAB (DAP (DAP (DAP (DAR 3) (DAB (DAB (DAP (DAR 1) (DAP (DAR 2) (DAR 4)))))) (DAB (DAR 2))) (DAB (DAR 1))))))
+
+subOperator = (DAB (DAB (DAP (DAP (DAR 1) predOperator) (DAR 2))))
+subExprTest = binIntOpTest "sub" subOperator (\a b -> if a < b then 0 else a - b)
+
+-- steps = []
 
 reduceDebrujinTests = do
   reduceOnceTest "0 fully reduced arg ref" (DAR 1) (DAR 1)
@@ -51,6 +59,8 @@ reduceDebrujinTests = do
   reduceOnceTest "11" (DAP (DAB (DAR 2)) (DAR 3)) (DAR 1)
   reduceOnceTest "12" (DAP (DAB (DAP (DAR 1) (DAR 1))) (DAR 3)) (DAP (DAR 3) (DAR 3))
   reduceOnceTest "13" (DAP (DAB (DAP (DAR 2) (DAR 2))) (DAR 3)) (DAP (DAR 1) (DAR 1)) 
+
+  --sequence $ map (\(a, (b, c)) -> reduceOnceTest ("seq " ++ show a) b c) $ zip [0..] $ zip steps (drop 1 steps)
 
   addExprTest 0 0
   addExprTest 0 1
@@ -104,28 +114,54 @@ reduceDebrujinTests = do
   multExprTest 4 3
   multExprTest 4 4
 
-  --powExprTest 0 0
-  --powExprTest 0 1
-  --powExprTest 0 2
-  --powExprTest 0 3
-  --powExprTest 0 4
-  --powExprTest 1 0
-  --powExprTest 1 1
+  powExprTest 0 0
+  powExprTest 0 1
+  powExprTest 0 2
+  powExprTest 0 3
+  powExprTest 0 4
+  powExprTest 1 0
+  powExprTest 1 1
   powExprTest 1 2
-  --powExprTest 1 3
-  --powExprTest 1 4
-  --powExprTest 2 0
-  --powExprTest 2 1
- -- powExprTest 2 2
-  --powExprTest 2 3
-  --powExprTest 2 4
-  --powExprTest 3 0
-  --powExprTest 3 1
-  --powExprTest 3 2
-  --powExprTest 3 3
-  --powExprTest 3 4
-  --powExprTest 4 0
-  --powExprTest 4 1
-  --powExprTest 4 2
-  --powExprTest 4 3
-  --powExprTest 4 4
+  powExprTest 1 3
+  powExprTest 1 4
+  powExprTest 2 0
+  powExprTest 2 1
+  powExprTest 2 2
+  powExprTest 2 3
+  powExprTest 2 4
+  powExprTest 3 0
+  powExprTest 3 1
+  powExprTest 3 2
+  powExprTest 3 3
+  powExprTest 3 4
+  powExprTest 4 0
+  powExprTest 4 1
+  powExprTest 4 2
+  powExprTest 4 3
+  powExprTest 4 4
+
+  subExprTest 0 0
+  subExprTest 0 1
+  subExprTest 0 2
+  subExprTest 0 3
+  subExprTest 0 4
+  subExprTest 1 0
+  subExprTest 1 1
+  subExprTest 1 2
+  subExprTest 1 3
+  subExprTest 1 4
+  subExprTest 2 0
+  subExprTest 2 1
+  subExprTest 2 2
+  subExprTest 2 3
+  subExprTest 2 4
+  subExprTest 3 0
+  subExprTest 3 1
+  subExprTest 3 2
+  subExprTest 3 3
+  subExprTest 3 4
+  subExprTest 4 0
+  subExprTest 4 1
+  subExprTest 4 2
+  subExprTest 4 3
+  subExprTest 4 4

@@ -37,12 +37,9 @@ lambdaAppliedTo :: Debrujin -> Debrujin -> Debrujin
 lambdaAppliedTo = lambdaArgRefReplacedWithLambda 1
 
 lambdaArgRefReplacedWithLambda :: Int -> Debrujin -> Debrujin -> Debrujin
-lambdaArgRefReplacedWithLambda 1 arg (DAR 1) =
-  arg
-lambdaArgRefReplacedWithLambda 1 _ (DAR argRef) =
-  (DAR (argRef - 1))
 lambdaArgRefReplacedWithLambda argRefReplace arg (DAR argRef)
   | argRefReplace == argRef = lambdaIncrementedArgRefsGreaterThanOrEqual arg 1 argRef
+  | argRefReplace < argRef = (DAR (argRef-1))
   | otherwise = (DAR argRef)
 lambdaArgRefReplacedWithLambda argRefReplace arg (DAB body) =
   (DAB (lambdaArgRefReplacedWithLambda (argRefReplace+1) arg body))
