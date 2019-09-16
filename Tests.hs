@@ -7,6 +7,7 @@ import DebrujinTests
 import LambdaTests
 import ParseLambdaLikeTests
 import LambdaToDebrujinTests
+import DebrujinToLambdaTests
 import ReduceDebrujinTests
 
 main :: IO ()
@@ -17,4 +18,5 @@ main = hspec $ do
     lambdaTests
     parseLambdaLikeTests
     lambdaToDebrujinTests
+    debrujinToLambdaTests
     reduceDebrujinTests
