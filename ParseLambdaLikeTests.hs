@@ -6,6 +6,7 @@ module ParseLambdaLikeTests
 where
 
 import Data.Either
+import Data.List
 
 import Text.ParserCombinators.Parsec
 import Test.Hspec
@@ -52,35 +53,21 @@ parseLambdaLikeToNullTest strType parseArg parsePre =
         LambdaLikeParseConfig 
           { parseArgFn=(parseArg) 
           , crunchArg=(const ()) 
-          , crunchApp=(\_ _ -> ()) 
+          , crunchApp=(\_ -> ()) 
           , parsePreAbs=(parsePre) 
           , crunchAbs=(\_ _ -> ()) 
           }
 
-(nullPass, nullFail) = parseLambdaLikeToNullTest "null" (return ()) (return ())
 (abPass, abFail) = parseLambdaLikeToNullTest "AB" (char 'a') (char 'b')
 (aPass, aFail) = parseLambdaLikeToNullTest "A" (char 'a') (return ())
-(bPass, bFail) = parseLambdaLikeToNullTest "B" (return ()) (char 'b')
 
-(nullToAB, _) =
+(aToInt, _) =
   parseLambdaLikeToValueTest 
-    "NullToAB"
+    "abToInt"
     (LambdaLikeParseConfig 
-      { parseArgFn=(return "a") 
-      , crunchArg=(id) 
-      , crunchApp=(\func arg -> "(" ++ func ++ " " ++ arg ++ ")")
-      , parsePreAbs=(return "b") 
-      , crunchAbs=(\preBody body -> "(/ " ++ preBody ++ " " ++ body ++ ")")
-      }
-    )
-
-(nullToInt, _) =
-  parseLambdaLikeToValueTest 
-    "NullToInt"
-    (LambdaLikeParseConfig 
-      { parseArgFn=(return 1) 
-      , crunchArg=(id) 
-      , crunchApp=(+)
+      { parseArgFn=(char 'a') 
+      , crunchArg=(const 1) 
+      , crunchApp=sum
       , parsePreAbs=(return 2) 
       , crunchAbs=(+)
       }
@@ -93,31 +80,6 @@ parseLambdaLikeToNullTest strType parseArg parsePre =
   parseTests "debrujin" (parseFromStr parseDebrujin)
 
 parseLambdaLikeTests = do
-  nullPass "()"
-  nullPass "(/)"
-  nullPass "(())"
-  nullPass "(() ())"
-  nullPass "(/ ())"
-  nullPass "(/ (/))"
-  nullPass "((((()())))())"
-  nullPass "((/((/(/))))(/))"
-
-  nullFail ""
-  nullFail "(() () ())"
-  nullFail "(/ /)"
-  nullFail "(()"
-  nullFail "(/()"
-  nullFail "((/)"
-  nullFail "a"
-  nullFail "(a a)"
-  nullFail "(/ b a)"
-  nullFail "((a a) a)"
-  nullFail "(a (a a))"
-  nullFail "((a a) (a a))"
-  nullFail "(/ b (a a))"
-  nullFail "(/ b (/ b a))"
-  nullFail "(((((a a)(a a)) a) a)(a a))"
-  nullFail "((/ b ((/ b (/ b a)) a))(/ b a))"
 
   abPass "(a a)"
   abPass "(/ b a)"
@@ -141,6 +103,10 @@ parseLambdaLikeTests = do
   abFail "((/((/(/))))(/))"
 
   aPass "(a a)"
+  aPass "(a a a)"
+  aPass "(a (a a) a)"
+  aPass "((a a) a a)"
+  aPass "(a a (a a))"
   aPass "(/ a)"
   aPass "((a a) a)"
   aPass "(a (a a))"
@@ -160,55 +126,49 @@ parseLambdaLikeTests = do
   aFail "(/ (/))"
   aFail "((((()())))())"
   aFail "((/((/(/))))(/))"
+  aFail "(() () ())"
+  aFail "(/ /)"
+  aFail "(()"
+  aFail "(/()"
+  aFail "((/)"
+  aFail "(/ b a)"
+  aFail "(/ b (a a))"
+  aFail "(/ b (/ b a))"
+  aFail "((/ b ((/ b (/ b a)) a))(/ b a))"
 
-  bPass "()"
-  bPass "(/ b)"
-  bPass "(())"
-  bPass "(()())"
-  bPass "(/ b ())"
-  bPass "(/ b (/ b))"
-  bPass "((((()())))())"
-  bPass "((/ b ((/ b (/ b))))(/ b))"
+  aToInt "(a a)" 2
+  aToInt "(/ a)" 3
+  aToInt "((a a) a)" 3
+  aToInt "(a (a a))" 3
+  aToInt "((a a) (a a))" 4
+  aToInt "(/ (a a))" 4
+  aToInt "(/ (/ a))" 5
+  aToInt "(((((a a)(a a)) a) a)(a a))" 8
+  aToInt "((/ ((/ (/ a)) a))(/ a))" 11
 
-  bFail ""
-  bFail "a"
-  bFail "(/)"
-  bFail "(/ ())"
-  bFail "(/ (/))"
-  bFail "((/((/(/))))(/))"
-
-  nullToAB "()" "(a a)"
-  nullToAB "(/)" "(/ b a)"
-  nullToAB "(())" "((a a) a)"
-  nullToAB "(() ())" "((a a) (a a))"
-  nullToAB "(/ ())" "(/ b (a a))"
-  nullToAB "(/ (/))" "(/ b (/ b a))"
-  nullToAB "((((()())))())" "(((((a a) (a a)) a) a) (a a))"
-  nullToAB "((/((/(/))))(/))" "((/ b ((/ b (/ b a)) a)) (/ b a))"
-
-  nullToInt "()" 2
-  nullToInt "(/)" 3
-  nullToInt "(())" 3
-  nullToInt "(() ())" 4
-  nullToInt "(/ ())" 4
-  nullToInt "(/ (/))" 5
-  nullToInt "((((()())))())" 8
-  nullToInt "((/((/(/))))(/))" 11
-
-  passLambda "(a a)" (LAP (LAR "a") (LAR "a"))
-  passLambda "(foo bar)" (LAP (LAR "foo") (LAR "bar"))
-  passLambda "(/ b a)" (LAB "b" (LAR "a"))
-  passLambda "(/ foo bar)" (LAB "foo" (LAR "bar"))
-  passLambda "(/ a a)" (LAB "a" (LAR "a"))
-  passLambda "((a a) a)" (LAP (LAP (LAR "a") (LAR "a")) (LAR "a"))
-  passLambda "(a (a a))" (LAP (LAR "a") (LAP (LAR "a") (LAR "a")))
-  passLambda "((a a) (a a))" (LAP (LAP (LAR "a") (LAR "a")) (LAP (LAR "a") (LAR "a")))
-  passLambda "(/ b (a a))"(LAB "b" (LAP (LAR "a") (LAR "a")))
-  passLambda "(/ b (/ b a))" (LAB "b" (LAB "b" (LAR "a")))
-  passLambda "(((((a a)(a a)) a) a)(a a))" (LAP (LAP (LAP (LAP (LAP (LAR "a") (LAR "a")) (LAP (LAR "a") (LAR "a"))) (LAR "a")) (LAR "a")) (LAP (LAR "a") (LAR "a")))
-  passLambda "((/ b ((/ b (/ b a)) a))(/ b a))" (LAP (LAB "b" (LAP (LAB "b" (LAB "b" (LAR "a"))) (LAR "a"))) (LAB "b" (LAR "a")))
-
+  passLambda "(a a)" (LAP [(LAR "a"), (LAR "a")])
+  passLambda "(a a a)" (LAP [(LAR "a"), (LAR "a"), (LAR "a")])
+  passLambda "(a (a a) a)" (LAP [(LAR "a"), (LAP [(LAR "a"), (LAR "a")]), (LAR "a")])
+  passLambda "((a a) a a)" (LAP [(LAP [(LAR "a"), (LAR "a")]), (LAR "a"), (LAR "a")])
+  passLambda "(a a (a a))" (LAP [(LAR "a"), (LAR "a"), (LAP [(LAR "a"), (LAR "a")])])
+  passLambda "(/ [a b c] a)" (LAB ["a", "b", "c"] (LAR "a"))
+  passLambda "(/ [a b c] (a b))" (LAB ["a", "b", "c"] (LAP [(LAR "a"), (LAR "b")]))
+  passLambda "(/ [a b c] (a b c))" (LAB ["a", "b", "c"] (LAP [(LAR "a"), (LAR "b"), (LAR "c")]))
+  passLambda "(/ [a b c] (a (b c)))" (LAB ["a", "b", "c"] (LAP [(LAR "a"), (LAP [(LAR "b"), (LAR "c")])]))
+  passLambda "(foo bar)" (LAP [(LAR "foo"), (LAR "bar")])
+  passLambda "(/ [b] a)" (LAB ["b"] (LAR "a"))
+  passLambda "(/ [foo] bar)" (LAB ["foo"] (LAR "bar"))
+  passLambda "(/ [a] a)" (LAB ["a"] (LAR "a"))
+  passLambda "((a a) a)" (LAP [(LAP [(LAR "a"), (LAR "a")]), (LAR "a")])
+  passLambda "(a (a a))" (LAP [(LAR "a"), (LAP [(LAR "a"), (LAR "a")])])
+  passLambda "((a a) (a a))" (LAP [(LAP [(LAR "a"), (LAR "a")]), (LAP [(LAR "a"), (LAR "a")])])
+  passLambda "(/ [b] (a a))"(LAB ["b"] (LAP [(LAR "a"), (LAR "a")]))
+  passLambda "(/ [b] (/ [b] a))" (LAB ["b"] (LAB ["b"] (LAR "a")))
+  passLambda "(((((a a)(a a)) a) a)(a a))" (LAP [(LAP [(LAP [(LAP [(LAP [(LAR "a"), (LAR "a")]), (LAP [(LAR "a"), (LAR "a")])]), (LAR "a")]), (LAR "a")]), (LAP [(LAR "a"), (LAR "a")])])
+  passLambda "((/ [b] ((/ [b] (/ [b] a)) a))(/ [b] a))" (LAP [(LAB ["b"] (LAP [(LAB ["b"] (LAB ["b"] (LAR "a"))), (LAR "a")])), (LAB ["b"] (LAR "a"))])
+  
   failLambda "(1 a)"
+  failLambda "(/ a b c)"
   failLambda "(/ 1 a)" 
   failLambda "(/ b 1)"
   failLambda ""
@@ -233,8 +193,10 @@ parseLambdaLikeTests = do
   passDebrujin "(1 2)" (DAP (DAR 1) (DAR 2))
   passDebrujin "(/ 1)" (DAB (DAR 1))
   passDebrujin "((2 1) 3)" (DAP (DAP (DAR 2) (DAR 1)) (DAR 3))
+  passDebrujin "(2 1 3)" (DAP (DAP (DAR 2) (DAR 1)) (DAR 3))
   passDebrujin "(4 (6 6))" (DAP (DAR 4) (DAP (DAR 6) (DAR 6)))
   passDebrujin "((1 2) (2 1))" (DAP (DAP (DAR 1) (DAR 2)) (DAP (DAR 2) (DAR 1)))
+  passDebrujin "(1 2 (2 1))" (DAP (DAP (DAR 1) (DAR 2)) (DAP (DAR 2) (DAR 1)))
   passDebrujin "(/ (2 2))" (DAB (DAP (DAR 2) (DAR 2)))
   passDebrujin "(/ (/ 1))" (DAB (DAB (DAR 1)))
   passDebrujin "(((((1 1)(1 1)) 1) 1)(1 1))" (DAP (DAP (DAP (DAP (DAP (DAR 1) (DAR 1)) (DAP (DAR 1) (DAR 1))) (DAR 1)) (DAR 1)) (DAP (DAR 1) (DAR 1)))

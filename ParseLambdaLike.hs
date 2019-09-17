@@ -20,7 +20,7 @@ data LambdaLikeParseConfig a b result =
   LambdaLikeParseConfig 
     { parseArgFn :: (SimpleParser a)
     , crunchArg :: (a -> result)
-    , crunchApp :: (result -> result -> result)
+    , crunchApp :: ([result] -> result)
     , parsePreAbs :: (SimpleParser b)
     , crunchAbs :: (b -> result -> result)
     }
@@ -47,8 +47,15 @@ parseArg config = do
 parseApplication :: LambdaLikeParseConfig a b result -> SimpleParser result
 parseApplication config = do
   func <- wrapWs ((parseLambdaLike config) <|> (parseArg config))
-  arg <- wrapWs ((parseLambdaLike config) <|> (parseArg config))
-  return (crunchApp config func arg)
+  args <- sepBy1 (wrapWs ((parseLambdaLike config) <|> (parseArg config))) (parseWhiteSpace ())
+  return (crunchApp config (func:args))
+
+parseLambdaParams :: SimpleParser [String]
+parseLambdaParams = do
+  _ <- wrapWs $ char '['
+  strs <- (sepBy1 (many1 letter) (parseWhiteSpace ()))
+  _ <- wrapWs $ char ']'
+  return strs
 
 parseLambda :: SimpleParser Lambda
 parseLambda = 
@@ -57,10 +64,20 @@ parseLambda =
       { parseArgFn=(many1 letter) 
       , crunchArg=LAR 
       , crunchApp=LAP 
-      , parsePreAbs=(many1 letter) 
+      , parsePreAbs=parseLambdaParams
       , crunchAbs=LAB 
       }
     )
+
+crunchDebrujinApp :: [Debrujin] -> Debrujin
+crunchDebrujinApp [] = 
+  error "crunchDebrujinApp blew up on empty list"
+crunchDebrujinApp [_] = 
+  error "crunchDebrujinApp blew up single elem list"
+crunchDebrujinApp [func, arg] = 
+  (DAP func arg)
+crunchDebrujinApp (func:arg:rest) =
+  crunchDebrujinApp ((DAP func arg):rest)
 
 parseDebrujin :: SimpleParser Debrujin
 parseDebrujin = 
@@ -68,7 +85,7 @@ parseDebrujin =
     (LambdaLikeParseConfig 
       { parseArgFn=(many1 digit) 
       , crunchArg=(DAR . read) 
-      , crunchApp=DAP 
+      , crunchApp=crunchDebrujinApp 
       , parsePreAbs=(return ()) 
       , crunchAbs=(\_ body -> DAB body)
       }

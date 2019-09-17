@@ -22,7 +22,10 @@ lambdaVarReplacedWithArgRefs replacements (LAR str) = do
   replacement <- lookup str replacements
   return (DAR replacement)
 
-lambdaVarReplacedWithArgRefs replacements (LAB str body) =
+lambdaVarReplacedWithArgRefs _ (LAB [] _) =
+  Nothing
+
+lambdaVarReplacedWithArgRefs replacements (LAB [str] body) =
   if isJust (lookup str replacements) then
     Nothing
   else do
@@ -30,7 +33,19 @@ lambdaVarReplacedWithArgRefs replacements (LAB str body) =
     newBody <- lambdaVarReplacedWithArgRefs newReplacements body
     return (DAB newBody)
 
-lambdaVarReplacedWithArgRefs replacements (LAP func arg) = do
+lambdaVarReplacedWithArgRefs replacements (LAB (str:strs) body) =
+  lambdaVarReplacedWithArgRefs replacements (LAB [str] (LAB strs body))
+
+lambdaVarReplacedWithArgRefs _ (LAP []) =
+  Nothing
+
+lambdaVarReplacedWithArgRefs _ (LAP [_]) =
+  Nothing
+
+lambdaVarReplacedWithArgRefs replacements (LAP [func, arg]) = do
   newFunc <- lambdaVarReplacedWithArgRefs replacements func
   newArg <- lambdaVarReplacedWithArgRefs replacements arg
   return (DAP newFunc newArg)
+
+lambdaVarReplacedWithArgRefs replacements (LAP (func:arg:rest)) =
+  lambdaVarReplacedWithArgRefs replacements (LAP ((LAP [func, arg]):rest))

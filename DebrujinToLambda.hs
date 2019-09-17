@@ -27,9 +27,9 @@ replaceArgRefsWithVars replacements (DAB body) = do
   let nextVarName = varNameFromN $ length replacements
   let nextReplacements = (1, nextVarName):(incReplacements replacements)
   newBody <- replaceArgRefsWithVars nextReplacements body
-  return (LAB nextVarName newBody)
+  return (LAB [nextVarName] newBody)
 
 replaceArgRefsWithVars replacements (DAP func arg) = do
   newFunc <- replaceArgRefsWithVars replacements func
   newArg <- replaceArgRefsWithVars replacements arg
-  return (LAP newFunc newArg)
+  return (LAP [newFunc, newArg])
