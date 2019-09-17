@@ -22,27 +22,37 @@ churchNum n = (DAB (DAB (churchNumHelper n)))
     churchNumHelper 0 = (DAR 1)
     churchNumHelper m = (DAP (DAR 2) (churchNumHelper (m-1)))
 
-binIntOpTest :: String -> Debrujin -> (Int -> Int -> Int) -> Int -> Int -> SpecWith ()
-binIntOpTest strType expr op a b =
-  it ("binIntOpTest " ++ strType ++ " " ++ show a ++ " " ++ show b) $ do 
-    (lambdaBetaReducedFull (DAP (DAP expr (churchNum a)) (churchNum b))) `shouldBe` (churchNum (op a b))
+intUnaryOpTest :: String -> Debrujin -> (Int -> Int) -> Int -> SpecWith ()
+intUnaryOpTest strType expr op a =
+  it ("intBinaryOpTest " ++ strType ++ " " ++ show a) $ do 
+    (lambdaBetaReducedFull (DAP expr (churchNum a))) `shouldBe` (churchNum (op a))
 
-addOperator = (DAB (DAB (DAB (DAB (DAP (DAP (DAR 4) (DAR 2)) (DAP (DAP (DAR 3) (DAR 2)) (DAR 1)))))))
-addExprTest = binIntOpTest "add" addOperator (+)
-
-multOperator = (DAB (DAB (DAB (DAP (DAR 3) (DAP (DAR 2) (DAR 1))))))
-multExprTest = binIntOpTest "mul" multOperator (*)
-
-powOperator = (DAB (DAB (DAB (DAB (DAP (DAP (DAP (DAR 3) (DAR 4)) (DAR 2)) (DAR 1))))))
-powExprTest = binIntOpTest "pow" powOperator (^)
+succOperator = (DAB (DAB (DAB (DAP (DAR 2) (DAP (DAP (DAR 3) (DAR 2)) (DAR 1))))))
+succExprTest = intUnaryOpTest "succ" succOperator (+1)
 
 predOperator = 
   (DAB (DAB (DAB (DAP (DAP (DAP (DAR 3) (DAB (DAB (DAP (DAR 1) (DAP (DAR 2) (DAR 4)))))) (DAB (DAR 2))) (DAB (DAR 1))))))
+predExprTest = intUnaryOpTest "pred" predOperator (\n -> if n == 0 then 0 else (n-1))
+
+intBinaryOpTest :: String -> Debrujin -> (Int -> Int -> Int) -> Int -> Int -> SpecWith ()
+intBinaryOpTest strType expr op a b =
+  it ("intBinaryOpTest " ++ strType ++ " " ++ show a ++ " " ++ show b) $ do 
+    (lambdaBetaReducedFull (DAP (DAP expr (churchNum a)) (churchNum b))) `shouldBe` (churchNum (op a b))
+
+addOperator = (DAB (DAB (DAB (DAB (DAP (DAP (DAR 4) (DAR 2)) (DAP (DAP (DAR 3) (DAR 2)) (DAR 1)))))))
+addExprTest = intBinaryOpTest "add" addOperator (+)
+
+multOperator = (DAB (DAB (DAB (DAP (DAR 3) (DAP (DAR 2) (DAR 1))))))
+multExprTest = intBinaryOpTest "mul" multOperator (*)
+
+powOperator = (DAB (DAB (DAB (DAB (DAP (DAP (DAP (DAR 3) (DAR 4)) (DAR 2)) (DAR 1))))))
+powExprTest = intBinaryOpTest "pow" powOperator (^)
 
 subOperator = (DAB (DAB (DAP (DAP (DAR 1) predOperator) (DAR 2))))
-subExprTest = binIntOpTest "sub" subOperator (\a b -> if a < b then 0 else a - b)
+subExprTest = intBinaryOpTest "sub" subOperator (\a b -> if a < b then 0 else a - b)
 
 -- steps = []
+-- testSteps = sequence $ map (\(a, (b, c)) -> reduceOnceTest ("seq " ++ show a) b c) $ zip [0..] $ zip steps (drop 1 steps)
 
 reduceDebrujinTests = do
   reduceOnceTest "0 fully reduced arg ref" (DAR 1) (DAR 1)
@@ -60,7 +70,17 @@ reduceDebrujinTests = do
   reduceOnceTest "12" (DAP (DAB (DAP (DAR 1) (DAR 1))) (DAR 3)) (DAP (DAR 3) (DAR 3))
   reduceOnceTest "13" (DAP (DAB (DAP (DAR 2) (DAR 2))) (DAR 3)) (DAP (DAR 1) (DAR 1)) 
 
-  --sequence $ map (\(a, (b, c)) -> reduceOnceTest ("seq " ++ show a) b c) $ zip [0..] $ zip steps (drop 1 steps)
+  succExprTest 0
+  succExprTest 1
+  succExprTest 2
+  succExprTest 3
+  succExprTest 4
+
+  predExprTest 0
+  predExprTest 1
+  predExprTest 2
+  predExprTest 3
+  predExprTest 4
 
   addExprTest 0 0
   addExprTest 0 1
