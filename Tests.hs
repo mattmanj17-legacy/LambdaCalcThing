@@ -14,9 +14,9 @@ main :: IO ()
 main = hspec $ do
   describe "lambda" $ do
     parseCommonTests
+    parseLambdaLikeTests
     debrujinTests
     lambdaTests
-    parseLambdaLikeTests
     lambdaToDebrujinTests
     debrujinToLambdaTests
     reduceDebrujinTests

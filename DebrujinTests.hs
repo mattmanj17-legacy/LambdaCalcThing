@@ -8,11 +8,26 @@ where
 import Test.Hspec
 
 import Debrujin
+import ParseLambdaLike
+import ParseCommon
+import TestHelpers
+
+unParseDebrujinStringTest :: String -> String -> SpecWith ()
+unParseDebrujinStringTest inStr outStr =
+  runUnaryTestWithMaybeInput 
+    (\debrujin -> it ("unParseDebrujinStringTest " ++ inStr ++ " " ++ outStr) $ do unParseDebrujin debrujin `shouldBe` outStr) 
+    (parseFromStrToMaybe parseDebrujin inStr)
+
+unParseDebrujinStringIdempotentTest :: String -> SpecWith ()
+unParseDebrujinStringIdempotentTest str = 
+  unParseDebrujinStringTest str str
 
 debrujinTests = do
-  it "debrujinTests" $ do
+  it "(DAR 1) == 1" $ do
     unParseDebrujin (DAR 1) `shouldBe` "1"
-    unParseDebrujin (DAB (DAR 1)) `shouldBe` "(/ 1)"
-    unParseDebrujin (DAP (DAR 1) (DAR 1)) `shouldBe` "(1 1)"
-    unParseDebrujin (DAP (DAB (DAR 1)) (DAR 1)) `shouldBe` "((/ 1) 1)"
-    unParseDebrujin (DAP (DAR 1) (DAP (DAB (DAR 1)) (DAR 1))) `shouldBe` "(1 ((/ 1) 1))"
+  unParseDebrujinStringIdempotentTest "(/ 1)"
+  unParseDebrujinStringTest "(/1  )" "(/ 1)"
+  unParseDebrujinStringIdempotentTest "(1 1)"
+  unParseDebrujinStringTest "(1   1 )" "(1 1)"
+  unParseDebrujinStringIdempotentTest "((/ 1) 1)"
+  unParseDebrujinStringIdempotentTest "(1 ((/ 1) 1))"

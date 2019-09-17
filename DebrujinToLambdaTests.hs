@@ -6,48 +6,67 @@ module DebrujinToLambdaTests
 where
 
 import Test.Hspec
+import Data.Maybe
 
 import Debrujin
 import Lambda
 import DebrujinToLambda
+import TestHelpers
+import ParseCommon
+import ParseLambdaLike
 
 debrujinToLambdaTest :: Debrujin -> Maybe Lambda -> SpecWith ()
 debrujinToLambdaTest debrujin lambda = 
   it ("debrujinToLambdaTest " ++ show debrujin ++ " " ++ show lambda) $ do
     (debrujinToLambda debrujin) `shouldBe` lambda
 
+maybeDebrujinToLambdaTest :: Maybe Debrujin -> Maybe Lambda -> SpecWith ()
+maybeDebrujinToLambdaTest = runBinaryTestWithMaybeInput debrujinToLambdaTest
+
+debrujinStrToLambdaTest :: String -> Maybe Lambda -> SpecWith ()
+debrujinStrToLambdaTest strIn out = do
+  let parsedIn = parseFromStrToMaybe parseDebrujin strIn
+  maybeDebrujinToLambdaTest parsedIn out
+
+debrujinStrToLambdaStrTest :: String -> String -> SpecWith ()
+debrujinStrToLambdaStrTest strIn strOut = do
+  let out = parseFromStrToMaybe parseLambda strOut
+  it ("check strOut " ++ strOut) $ do
+    out `shouldSatisfy` isJust
+  debrujinStrToLambdaTest strIn out
+
 debrujinToLambdaTests = do
   debrujinToLambdaTest
     (DAR 1)
     Nothing
-  debrujinToLambdaTest 
-    (DAB (DAR 1))
-    (Just (LAB ["a"] (LAR "a")))
-  debrujinToLambdaTest 
-    (DAB (DAB (DAP (DAR 1) (DAR 2))))
-    (Just (LAB ["a"] (LAB ["b"] (LAP [(LAR "b"), (LAR "a")]))))
-  debrujinToLambdaTest 
-    (DAB (DAB (DAR 1)))
-    (Just (LAB ["a"] (LAB ["b"] (LAR "b"))))
-  debrujinToLambdaTest 
-    (DAP (DAB (DAR 1)) (DAB (DAR 1)))
-    (Just (LAP [(LAB ["a"] (LAR "a")), (LAB ["a"] (LAR "a"))]) )
-  debrujinToLambdaTest 
-    (DAP (DAB (DAB (DAR 2))) (DAB (DAR 1)))
-    (Just (LAP [(LAB ["a"] (LAB ["b"] (LAR "a"))), (LAB ["a"] (LAR "a"))]))
-  debrujinToLambdaTest 
-    (DAB (DAB (DAB (DAB (DAP (DAP (DAR 4) (DAR 2)) (DAP (DAP (DAR 3) (DAR 2)) (DAR 1)))))))
-    (Just (LAB ["a"] (LAB ["b"] (LAB ["c"] (LAB ["d"] (LAP [(LAP [(LAR "a"), (LAR "c")]), (LAP [(LAP [(LAR "b"), (LAR "c")]), (LAR "d")])]))))))
-  debrujinToLambdaTest 
-    (DAB (DAB (DAR 1)))
-    (Just (LAB ["a"] (LAB ["b"] (LAR "b"))))
-  debrujinToLambdaTest 
-    (DAB (DAB (DAP (DAR 2) (DAR 1))))
-    (Just (LAB ["a"] (LAB ["b"] (LAP [(LAR "a"), (LAR "b")]))))
-  debrujinToLambdaTest 
-    (DAB (DAB (DAP (DAR 2) (DAP (DAR 2) (DAR 1)))))
-    (Just (LAB ["a"] (LAB ["b"] (LAP [(LAR "a"), (LAP [(LAR "a"), (LAR "b")])])))) 
-  debrujinToLambdaTest 
-    (DAB (DAB (DAP (DAR 2) (DAP (DAR 2) (DAP (DAR 2) (DAR 1))))))
-    (Just (LAB ["a"] (LAB ["b"] (LAP [(LAR "a"), (LAP [(LAR "a"), (LAP [(LAR "a"), (LAR "b")])])]))))
+  debrujinStrToLambdaStrTest 
+    "(/ 1)"
+    "(/ [a] a)"
+  debrujinStrToLambdaStrTest 
+    "(/ (/ (1 2)))"
+    "(/ [a] (/ [b] (b a)))"
+  debrujinStrToLambdaStrTest 
+    "(/ (/ 1))"
+    "(/ [a] (/ [b] b))"
+  debrujinStrToLambdaStrTest 
+    "((/ 1) (/1))"
+    "((/ [a] a) (/ [a] a))"
+  debrujinStrToLambdaStrTest 
+    "((/ (/ 2)) (/ 1))"
+    "((/ [a] (/ [b] a)) (/ [a] a))"
+  debrujinStrToLambdaStrTest 
+    "(/ (/ (/ (/ ((4 2) ((3 2) 1))))))"
+    "(/ [a] (/ [b] (/ [c] (/ [d] ((a c) ((b c) d))))))"
+  debrujinStrToLambdaStrTest 
+    "(/ (/ 1))"
+    "(/ [a] (/ [b] b))"
+  debrujinStrToLambdaStrTest 
+    "(/ (/ (2 1)))"
+    "(/ [a] (/ [b] (a b)))"
+  debrujinStrToLambdaStrTest 
+    "(/ (/ (2 (2 1))))"
+    "(/ [a] (/ [b] (a (a b))))"
+  debrujinStrToLambdaStrTest 
+    "(/ (/ (2 (2 (2 1)))))"
+    "(/ [a] (/ [b] (a (a (a b)))))"
     

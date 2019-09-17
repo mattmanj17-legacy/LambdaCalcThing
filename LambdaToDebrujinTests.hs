@@ -13,73 +13,89 @@ import ParseLambdaLike
 import Lambda
 import Debrujin
 import LambdaToDebrujin
+import TestHelpers
 
 anonTest :: Lambda -> Maybe Debrujin -> SpecWith ()
 anonTest lambda debrujin =
    it ("anonTest " ++ show lambda ++ " " ++ show debrujin) $ do
     (lambdaBoundVarsAnonymized lambda) `shouldBe` debrujin
 
+maybeLambdaToDebrujinTest :: Maybe Lambda -> Maybe Debrujin -> SpecWith ()
+maybeLambdaToDebrujinTest = runBinaryTestWithMaybeInput anonTest
+
+lambdaStrToDebrujinTest :: String -> Maybe Debrujin -> SpecWith ()
+lambdaStrToDebrujinTest strIn out = do
+  let parsedIn = parseFromStrToMaybe parseLambda strIn
+  maybeLambdaToDebrujinTest parsedIn out
+
+lambdaStrToDebrujinStrTest :: String -> String -> SpecWith ()
+lambdaStrToDebrujinStrTest strIn strOut = do
+  let out = parseFromStrToMaybe parseDebrujin strOut
+  it ("check strOut " ++ strOut) $ do
+    out `shouldSatisfy` isJust
+  lambdaStrToDebrujinTest strIn out
+
 lambdaToDebrujinTests = do
   anonTest
     (LAR "foo")
     Nothing
-  anonTest
-    (LAB ["x"] (LAR "y"))
+  lambdaStrToDebrujinTest
+    "(/ [x] y)"
     Nothing
-  anonTest
-    (LAB ["x", "z"] (LAR "y"))
+  lambdaStrToDebrujinTest
+    "(/ [x z] y)"
     Nothing
-  anonTest
-    (LAB ["x", "y"] (LAR "y"))
-    (Just (DAB (DAB (DAR 1))))
-  anonTest
-    (LAB ["y", "x"] (LAR "y"))
-    (Just (DAB (DAB (DAR 2))))
-  anonTest
-    (LAP [(LAR "x"), (LAR "y")])
+  lambdaStrToDebrujinStrTest
+    "(/ [x y] y)"
+    "(/ (/ 1))"
+  lambdaStrToDebrujinStrTest
+    "(/ [y x] y)"
+    "(/ (/ 2))"
+  lambdaStrToDebrujinTest
+    "(x y)"
     Nothing
-  anonTest 
-    (LAB ["x"] (LAR "x"))
-    (Just (DAB (DAR 1)))
-  anonTest 
-    (LAB ["x"] (LAB ["x"] (LAR "x")))
+  lambdaStrToDebrujinStrTest 
+    "(/ [x] x)"
+    "(/ 1)"
+  lambdaStrToDebrujinTest 
+    "(/ [x] (/ [x] x))"
     Nothing
-  anonTest 
-    (LAB ["x", "x"] (LAR "x"))
+  lambdaStrToDebrujinTest 
+    "(/ [x x] x)"
     Nothing
-  anonTest 
-    (LAB ["a", "b", "c"] (LAB ["c", "d", "e"] (LAR "e")))
+  lambdaStrToDebrujinTest 
+    "(/ [a b c] (/ [c d e] e))"
     Nothing
-  anonTest 
-    (LAB ["y"] (LAB ["x"] (LAP [(LAR "x"), (LAR "y")])))
-    (Just (DAB (DAB (DAP (DAR 1) (DAR 2)))))
-  anonTest 
-    (LAB ["y"] (LAB ["x"] (LAP [(LAR "x"), (LAR "y"), (LAR "x"), (LAR "y")])))
-    (Just (DAB (DAB (DAP (DAP (DAP (DAR 1) (DAR 2)) (DAR 1)) (DAR 2)))))
-  anonTest 
-    (LAB ["y"] (LAB ["x"] (LAR "x")))
-    (Just (DAB (DAB (DAR 1))))
-  anonTest 
-    (LAP [(LAB ["x"] (LAR "x")), (LAB ["x"] (LAR "x"))]) 
-    (Just (DAP (DAB (DAR 1)) (DAB (DAR 1))))
-  anonTest 
-    (LAP [(LAB ["x"] (LAB ["y"] (LAR "x"))), (LAB ["x"] (LAR "x"))]) 
-    (Just (DAP (DAB (DAB (DAR 2))) (DAB (DAR 1))))
-  anonTest 
-    (LAB ["m"] (LAB ["n"] (LAB ["f"] (LAB ["x"] (LAP [(LAP [(LAR "m"), (LAR "f")]), (LAP [(LAP [(LAR "n"), (LAR "f")]), (LAR "x")])])))))
-    (Just (DAB (DAB (DAB (DAB (DAP (DAP (DAR 4) (DAR 2)) (DAP (DAP (DAR 3) (DAR 2)) (DAR 1))))))))
-  anonTest 
-    (LAB ["m", "n", "f", "x"] (LAP [(LAR "m"), (LAR "f"), (LAP [(LAR "n"), (LAR "f"), (LAR "x")])]))
-    (Just (DAB (DAB (DAB (DAB (DAP (DAP (DAR 4) (DAR 2)) (DAP (DAP (DAR 3) (DAR 2)) (DAR 1))))))))
-  anonTest 
-    (LAB ["f"] (LAB ["x"] (LAR "x"))) 
-    (Just (DAB (DAB (DAR 1))))
-  anonTest 
-    (LAB ["f"] (LAB ["x"] (LAP [(LAR "f"), (LAR "x")])))
-    (Just (DAB (DAB (DAP (DAR 2) (DAR 1)))))
-  anonTest 
-    (LAB ["f"] (LAB ["x"] (LAP [(LAR "f"), (LAP [(LAR "f"), (LAR "x")])]))) 
-    (Just (DAB (DAB (DAP (DAR 2) (DAP (DAR 2) (DAR 1))))))
-  anonTest 
-    (LAB ["f"] (LAB ["x"] (LAP [(LAR "f"), (LAP [(LAR "f"), (LAP [(LAR "f"), (LAR "x")])])])))
-    (Just (DAB (DAB (DAP (DAR 2) (DAP (DAR 2) (DAP (DAR 2) (DAR 1)))))))
+  lambdaStrToDebrujinStrTest 
+    "(/ [y] (/ [x] (x y)))"
+    "(/ (/ (1 2)))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [y] (/ [x] (x y x y)))"
+    "(/ (/ (1 2 1 2)))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [y] (/ [x] x))"
+    "(/ (/ 1))"
+  lambdaStrToDebrujinStrTest 
+    "((/ [x] x) (/ [x] x))"
+    "((/ 1) (/ 1))"
+  lambdaStrToDebrujinStrTest 
+    "((/ [x] (/ [y] x)) (/ [x] x))"
+    "((/ (/ 2)) (/ 1))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [m] (/ [n] (/ [f] (/ [x] ((m f) ((n f) x))))))"
+    "(/ (/ (/ (/ ((4 2) ((3 2) 1))))))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [m n f x] (m f (n f x)))"
+    "(/ (/ (/ (/ (4 2 (3 2 1))))))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [f] (/ [x] x))"
+    "(/ (/ 1))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [f] (/ [x] (f x)))"
+    "(/ (/ (2 1)))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [f] (/ [x] (f (f x))))"
+    "(/ (/ (2 (2 1))))"
+  lambdaStrToDebrujinStrTest 
+    "(/ [f] (/ [x] (f (f (f x)))))"
+    "(/ (/ (2 (2 (2 1)))))"

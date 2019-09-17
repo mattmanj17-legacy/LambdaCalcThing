@@ -8,13 +8,26 @@ where
 import Test.Hspec
 
 import Lambda
+import TestHelpers
+import ParseLambdaLike
+import ParseCommon
+
+unParseLambdaStringTest :: String -> String -> SpecWith ()
+unParseLambdaStringTest inStr outStr =
+  runUnaryTestWithMaybeInput 
+    (\lambda -> it ("unParseLambdaStringTest " ++ inStr ++ " " ++ outStr) $ do unParseLambda lambda `shouldBe` outStr) 
+    (parseFromStrToMaybe parseLambda inStr)
+
+unParseLambdaStringIdempotentTest :: String -> SpecWith ()
+unParseLambdaStringIdempotentTest str = 
+  unParseLambdaStringTest str str
 
 lambdaTests = do
   it "lambdaTests" $ do
     unParseLambda (LAR "foo") `shouldBe` "foo"
-    unParseLambda (LAB ["foo"] (LAR "bar")) `shouldBe` "(/ [foo] bar)"
-    unParseLambda (LAB ["foo", "bonk"] (LAR "bar")) `shouldBe` "(/ [foo bonk] bar)"
-    unParseLambda (LAP [(LAR "foo"), (LAR "bar")]) `shouldBe` "(foo bar)"
-    unParseLambda (LAP [(LAR "foo"), (LAR "bar"), (LAR "bonk")]) `shouldBe` "(foo bar bonk)"
-    unParseLambda (LAP [(LAB ["a"] (LAR "b")), (LAR "c")]) `shouldBe` "((/ [a] b) c)"
-    unParseLambda (LAP [(LAR "a"), (LAP [(LAB ["b"] (LAR "c")), (LAR "d")])]) `shouldBe` "(a ((/ [b] c) d))"
+  unParseLambdaStringIdempotentTest "(/ [foo] bar)"
+  unParseLambdaStringIdempotentTest "(/ [foo bonk] bar)"
+  unParseLambdaStringIdempotentTest "(foo bar)"
+  unParseLambdaStringIdempotentTest "(foo bar bonk)"
+  unParseLambdaStringIdempotentTest "((/ [a] b) c)"
+  unParseLambdaStringIdempotentTest "(a ((/ [b] c) d))"

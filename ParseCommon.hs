@@ -24,3 +24,6 @@ wrapWs parser = do
 
 parseFromStr :: Stream s Identity t => Parsec s () a -> s -> Either ParseError a
 parseFromStr parseFn = parse parseFn "unknown"
+
+parseFromStrToMaybe :: Stream s Identity t => Parsec s () a -> s -> Maybe a
+parseFromStrToMaybe parseFn = (either (const Nothing) Just) . (parseFromStr parseFn)
