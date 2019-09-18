@@ -5,7 +5,7 @@ module ReduceLambdaTests
 ) 
 where
 
-import Data.Maybe
+import Data.Either
 import Test.Hspec
 
 import LambdaAst
@@ -16,13 +16,13 @@ import ParseCommon
 reduceFullTest :: String -> String -> String -> SpecWith ()
 reduceFullTest strDesc strIn strOut = do
   it strDesc $ do
-    parsedIn `shouldSatisfy` isJust
+    parsedIn `shouldSatisfy` isRight
   it strDesc $ do
-    parsedOut `shouldSatisfy` isJust
-  if isJust parsedIn && isJust parsedOut then do
+    parsedOut `shouldSatisfy` isRight
+  if isRight parsedIn && isRight parsedOut then do
     it strDesc $ do
-      reducedOnce `shouldSatisfy` isJust
-    if isJust reducedOnce then
+      reducedOnce `shouldSatisfy` isRight
+    if isRight reducedOnce then
       it strDesc $ do
         justReducedOnced `shouldBe` justOut
     else
@@ -30,12 +30,12 @@ reduceFullTest strDesc strIn strOut = do
   else
     return ()
   where
-    parsedIn = parseFromStrToMaybe parseLambda strIn
-    parsedOut = parseFromStrToMaybe parseLambda strOut
-    justIn = fromJust parsedIn
-    justOut = fromJust parsedOut
+    parsedIn = parseFromStrToEither parseLambda strIn
+    parsedOut = parseFromStrToEither parseLambda strOut
+    justIn = fromRightUnsafe parsedIn
+    justOut = fromRightUnsafe parsedOut
     reducedOnce = lambdaBetaReducedFull justIn
-    justReducedOnced = fromJust reducedOnce
+    justReducedOnced = fromRightUnsafe reducedOnce
 
 churchNum :: Int -> LambdaAst
 churchNum n = (LambdaAnonAbstraction (LambdaAnonAbstraction (churchNumHelper n)))
@@ -46,15 +46,15 @@ churchNum n = (LambdaAnonAbstraction (LambdaAnonAbstraction (churchNumHelper n))
 intUnaryOpTest :: String -> LambdaAst -> (Int -> Int) -> Int -> SpecWith ()
 intUnaryOpTest strDesc expr op a = do
   it strDesc $ do 
-    reduced `shouldSatisfy` isJust
-  if isJust reduced then
+    reduced `shouldSatisfy` isRight
+  if isRight reduced then
     it strDesc $ do 
       justReduced `shouldBe` (churchNum (op a))
   else
     return ()
   where
     reduced = lambdaBetaReducedFull (LambdaApplication [expr, (churchNum a)])
-    justReduced = fromJust reduced
+    justReduced = fromRightUnsafe reduced
 
 succOperator = 
   (LambdaAnonAbstraction 
@@ -118,7 +118,7 @@ intBinaryOpTest strDesc expr op a b =
           (churchNum b)]
         )
       )  
-      (Just (churchNum (op a b)))
+      (Right (churchNum (op a b)))
 
 addOperator = 
   (LambdaAnonAbstraction 
@@ -198,34 +198,34 @@ subExprTest = intBinaryOpTest "sub" subOperator (\a b -> if a < b then 0 else a 
 reduceLambdaTests = do
   
   it "ro0" $ do 
-    shouldBe
-      (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "((% (/ #1 a)) s)")))
-      Nothing
+    shouldNotSatisfy
+      (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ #1 a)) s)")))
+      isRight
 
   it "ro1" $ do 
-    shouldBe
-      (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "((% (/ (/ b b) a)) s)")))
-      Nothing
+    shouldNotSatisfy
+      (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ (/ b b) a)) s)")))
+      isRight
 
   it "ro2" $ do 
-    shouldBe
-      (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "((% (/ (% #1) a)) s)")))
-      Nothing
+    shouldNotSatisfy
+      (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ (% #1) a)) s)")))
+      isRight
 
   it "ro3" $ do 
-    shouldBe
-      (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "((% (/ [] a)) s)")))
-      Nothing
+    shouldNotSatisfy
+      (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ [] a)) s)")))
+      isRight
 
   it "ro4" $ do 
-    shouldBe
-      (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "((% (/ (b b) a)) s)")))
-      Nothing
+    shouldNotSatisfy
+      (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ (b b) a)) s)")))
+      isRight
 
   it "ro5" $ do 
-    shouldBe
-      (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "(a)")))
-      Nothing
+    shouldNotSatisfy
+      (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "(a)")))
+      isRight
 
   reduceFullTest "rf1" "(cons a [b c])" "[a b c]"
   reduceFullTest "rf2" "(apply [a b c])" "(a b c)" -- this can probably be implimented at user level

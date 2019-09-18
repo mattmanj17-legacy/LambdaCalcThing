@@ -3,6 +3,8 @@
 
 module ParseCommon where
 
+import Data.Either
+
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Prim
 
@@ -25,5 +27,8 @@ wrapWs parser = do
 parseFromStr :: Stream s Identity t => Parsec s () a -> s -> Either ParseError a
 parseFromStr parseFn = parse parseFn "unknown"
 
-parseFromStrToMaybe :: Stream s Identity t => Parsec s () a -> s -> Maybe a
-parseFromStrToMaybe parseFn = (either (const Nothing) Just) . (parseFromStr parseFn)
+parseFromStrToEither :: Stream s Identity t => Parsec s () a -> s -> Either String a
+parseFromStrToEither parseFn = (either (Left . show) Right) . (parseFromStr parseFn)
+
+fromRightUnsafe :: Either a b -> b
+fromRightUnsafe = fromRight undefined

@@ -1,17 +1,17 @@
 module TestHelpers where
 
-import Data.Maybe
+import Data.Either
 import Test.Hspec 
 
-runUnaryTestWithMaybeInput :: Show a => String -> (String -> a -> SpecWith ()) -> Maybe a -> SpecWith ()
+runUnaryTestWithMaybeInput :: Show a => String -> (String -> a -> SpecWith ()) -> Either String a -> SpecWith ()
 runUnaryTestWithMaybeInput strDesc test ma = do
   it strDesc $ do
-    ma `shouldSatisfy` isJust
-  maybe (return ()) (test strDesc) ma
+    ma `shouldSatisfy` isRight
+  either (const $ return ()) (test strDesc) ma
 
 
-runBinaryTestWithMaybeInput :: Show a => String ->  (String -> a -> b -> SpecWith ()) -> Maybe a -> b -> SpecWith ()
+runBinaryTestWithMaybeInput :: Show a => String ->  (String -> a -> b -> SpecWith ()) -> Either String a -> b -> SpecWith ()
 runBinaryTestWithMaybeInput strDesc test ma b = do
   it strDesc $ do
-    ma `shouldSatisfy` isJust
-  maybe (return ()) (\a -> test strDesc a b) ma
+    ma `shouldSatisfy` isRight
+  either (const $ return ()) (\a -> test strDesc a b) ma

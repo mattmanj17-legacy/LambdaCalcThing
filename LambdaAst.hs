@@ -11,7 +11,7 @@ data LambdaAst =
   LambdaAbstraction LambdaAst LambdaAst |
   LambdaAnonAbstraction LambdaAst |
   LambdaApplication [LambdaAst] |
-  LambdaBif (LambdaAst -> Maybe LambdaAst)
+  LambdaBif (LambdaAst -> Either String LambdaAst)
 
 instance Show LambdaAst where
   show (LambdaId str) = 

@@ -5,8 +5,9 @@ module UnAnonLambdaTests
 )
 where
 
+import Data.Either
+
 import Test.Hspec
-import Data.Maybe
 
 import LambdaAst
 import UnAnonLambda
@@ -17,30 +18,30 @@ import ParseLambda
 unAnonLambdaTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 unAnonLambdaTest strDesc lambdaIn lambdaOut = do
   it strDesc $ do
-    unanoned `shouldSatisfy` isJust
-  if isJust unanoned then
+    unanoned `shouldSatisfy` isRight
+  if isRight unanoned then
     it strDesc $ do
       justUnanoned `shouldBe` lambdaOut
   else
     return ()
   where
     unanoned = unAnonLambda lambdaIn
-    justUnanoned = fromJust unanoned
+    justUnanoned = fromRightUnsafe unanoned
 
-maybeLambdaToLambdaTest :: String -> Maybe LambdaAst -> LambdaAst -> SpecWith ()
+maybeLambdaToLambdaTest :: String -> Either String LambdaAst -> LambdaAst -> SpecWith ()
 maybeLambdaToLambdaTest strDesc = runBinaryTestWithMaybeInput strDesc unAnonLambdaTest
 
 lambdaStrToLambdaTest :: String -> String -> LambdaAst -> SpecWith ()
 lambdaStrToLambdaTest strDesc strIn out = do
-  let parsedIn = parseFromStrToMaybe parseLambda strIn
+  let parsedIn = parseFromStrToEither parseLambda strIn
   maybeLambdaToLambdaTest strDesc parsedIn out
 
 lambdaStrToLambdaStrTest :: String -> String -> String -> SpecWith ()
 lambdaStrToLambdaStrTest strDesc strIn strOut = do
-  let out = parseFromStrToMaybe parseLambda strOut
+  let out = parseFromStrToEither parseLambda strOut
   it strDesc $ do
-    out `shouldSatisfy` isJust
-  maybe (return ()) (lambdaStrToLambdaTest strDesc strIn) out
+    out `shouldSatisfy` isRight
+  either (const $ return ()) (lambdaStrToLambdaTest strDesc strIn) out
 
 unAnonLambdaTests = do
   unAnonLambdaTest "ual0"

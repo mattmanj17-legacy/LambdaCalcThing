@@ -17,7 +17,7 @@ unParseLambdaStringTest strDesc inStr outStr =
   runUnaryTestWithMaybeInput
     strDesc
     (\sd lambda -> it sd $ do show lambda `shouldBe` outStr) 
-    (parseFromStrToMaybe parseLambda inStr)
+    (parseFromStrToEither parseLambda inStr)
 
 unParseLambdaStringIdempotentTest :: String ->  String -> SpecWith ()
 unParseLambdaStringIdempotentTest strDesc str = 

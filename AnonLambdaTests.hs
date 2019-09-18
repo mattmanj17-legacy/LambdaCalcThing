@@ -5,7 +5,7 @@ module AnonLambdaTests
 )
 where
 
-import Data.Maybe
+import Data.Either
 import Test.Hspec
 
 import ParseCommon
@@ -17,30 +17,30 @@ import TestHelpers
 anonTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 anonTest strDesc lambdaIn lambdaOut = do
   it strDesc $ do
-    anoned `shouldSatisfy` isJust
-  if isJust anoned then
+    anoned `shouldSatisfy` isRight
+  if isRight anoned then
     it strDesc $ do
       justAnoned `shouldBe` lambdaOut
   else
     return ()
   where
     anoned = anonLambda lambdaIn
-    justAnoned = fromJust anoned
+    justAnoned = fromRightUnsafe anoned
 
-anonMaybeLambdaToLambdaTest :: String -> Maybe LambdaAst -> LambdaAst -> SpecWith ()
+anonMaybeLambdaToLambdaTest :: String -> Either String LambdaAst -> LambdaAst -> SpecWith ()
 anonMaybeLambdaToLambdaTest strDesc = runBinaryTestWithMaybeInput strDesc anonTest
 
 anonLambdaStrToLambdaTest :: String -> String -> LambdaAst -> SpecWith ()
 anonLambdaStrToLambdaTest strDesc strIn out = do
-  let parsedIn = parseFromStrToMaybe parseLambda strIn
+  let parsedIn = parseFromStrToEither parseLambda strIn
   anonMaybeLambdaToLambdaTest strDesc parsedIn out
 
 anonLambdaStrToStrTest :: String -> String -> String -> SpecWith ()
 anonLambdaStrToStrTest strDesc strIn strOut = do
-  let out = parseFromStrToMaybe parseLambda strOut
+  let out = parseFromStrToEither parseLambda strOut
   it strDesc $ do
-    out `shouldSatisfy` isJust
-  maybe (return ()) (anonLambdaStrToLambdaTest strDesc strIn) out
+    out `shouldSatisfy` isRight
+  either (const $ return ()) (anonLambdaStrToLambdaTest strDesc strIn) out
 
 anonLambdaTests = do
   anonLambdaStrToStrTest "al0"
@@ -65,11 +65,11 @@ anonLambdaTests = do
     "(/ [x] x)"
     "(% #1)"
   it "al7" $ do
-    (anonLambda (fromJust (parseFromStrToMaybe parseLambda "(/ [x] (/ [x] x))"))) `shouldBe` Nothing
+    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [x] (/ [x] x))"))) `shouldNotSatisfy` isRight
   it "al8" $ do
-    (anonLambda (fromJust (parseFromStrToMaybe parseLambda "(/ [x x] x)"))) `shouldBe` Nothing
+    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [x x] x)"))) `shouldNotSatisfy` isRight
   it "al9" $ do
-    (anonLambda (fromJust (parseFromStrToMaybe parseLambda "(/ [a b c] (/ [c d e] e))"))) `shouldBe` Nothing
+    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [a b c] (/ [c d e] e))"))) `shouldNotSatisfy` isRight
   anonLambdaStrToStrTest "al10"
     "(/ [y] (/ [x] (x y)))"
     "(% (% (#1 #2)))"

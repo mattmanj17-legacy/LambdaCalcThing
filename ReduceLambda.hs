@@ -7,83 +7,80 @@ import Data.Maybe
 
 -- ANON
 
-anonLambda :: LambdaAst -> Maybe LambdaAst
+anonLambda :: LambdaAst -> Either String LambdaAst
 anonLambda = replaceVars []
 
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
-replaceVars :: [(String, Int)] -> LambdaAst -> Maybe LambdaAst
+replaceVars :: [(String, Int)] -> LambdaAst -> Either String LambdaAst
 replaceVars reps repIn =
   case repIn of
     (LambdaId str) -> replaceVarsInId reps str
-    (LambdaArgRef argRef) -> (Just (LambdaArgRef argRef))
+    (LambdaArgRef argRef) -> (Right (LambdaArgRef argRef))
     (LambdaList elems) -> replaceVarsInList reps elems
     (LambdaAbstraction params body) -> replaceVarsInAbs reps params body
     (LambdaAnonAbstraction body) ->  replaceVarsInAnonAbs reps body 
     (LambdaApplication terms) -> replaceVarsInApp reps terms
-    (LambdaBif fn) -> (Just (LambdaBif fn))
+    (LambdaBif fn) -> (Right (LambdaBif fn))
 
-replaceVarsInId :: [(String, Int)] -> String -> Maybe LambdaAst
+replaceVarsInId :: [(String, Int)] -> String -> Either String LambdaAst
 replaceVarsInId reps str =
-  Just $ maybe (LambdaId str) LambdaArgRef (lookup str reps)
+  Right $ maybe (LambdaId str) LambdaArgRef (lookup str reps)
 
-replaceVarsInList :: [(String, Int)] -> [LambdaAst] -> Maybe LambdaAst
+replaceVarsInList :: [(String, Int)] -> [LambdaAst] -> Either String LambdaAst
 replaceVarsInList reps elems = do
   newElems <- sequence $ map (replaceVars reps) elems
   return $ LambdaList newElems
 
-replaceVarsInApp :: [(String, Int)] -> [LambdaAst] -> Maybe LambdaAst
+replaceVarsInApp :: [(String, Int)] -> [LambdaAst] -> Either String LambdaAst
 replaceVarsInApp reps terms = do
   newTerms <- sequence $ map (replaceVars reps) terms
   return $ LambdaApplication newTerms
 
-replaceVarsInAnonAbs :: [(String, Int)] -> LambdaAst -> Maybe LambdaAst
+replaceVarsInAnonAbs :: [(String, Int)] -> LambdaAst -> Either String LambdaAst
 replaceVarsInAnonAbs reps body = do
   newBody <- replaceVars (incReps reps) body
   return (LambdaAnonAbstraction newBody)
 
-replaceVarsInAbs :: [(String, Int)] -> LambdaAst -> LambdaAst -> Maybe LambdaAst
+replaceVarsInAbs :: [(String, Int)] -> LambdaAst -> LambdaAst -> Either String LambdaAst
 replaceVarsInAbs reps params body =
   case params of
     (LambdaId str) -> replaceVarsInAbsIdParam reps str body
-    (LambdaArgRef _) -> Nothing
     (LambdaList elems) -> replaceVarsInAbsListParam reps elems body
-    (LambdaAbstraction _ _) -> Nothing
-    (LambdaAnonAbstraction _) -> Nothing
     (LambdaApplication terms) -> replaceVarsInAbsAppParam reps terms body
-    (LambdaBif _) -> Nothing
+    _ -> Left $ "replaceVarsInAbs blew up on " ++ (show params) ++ " params"
 
-replaceVarsInAbsIdParam :: [(String, Int)] -> String -> LambdaAst -> Maybe LambdaAst
+replaceVarsInAbsIdParam :: [(String, Int)] -> String -> LambdaAst -> Either String LambdaAst
 replaceVarsInAbsIdParam reps str body = do
   if isJust $ lookup str reps then
-    Nothing
+    Left "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body
     return (LambdaAnonAbstraction newBody)
 
-replaceVarsInAbsListParam :: [(String, Int)] -> [LambdaAst] -> LambdaAst -> Maybe LambdaAst
+replaceVarsInAbsListParam :: [(String, Int)] -> [LambdaAst] -> LambdaAst -> Either String LambdaAst
 replaceVarsInAbsListParam reps paramElems body =
   case paramElems of
-    [] -> Nothing
+    [] -> Left "replaceVarsInAbsListParam blew up because we got an empty params list"
     [singleElem] -> replaceVarsInAbs reps singleElem body
     (firstElem:rest) -> replaceVarsInAbs reps firstElem (LambdaAbstraction (LambdaList rest) body)
 
-replaceVarsInAbsAppParam :: [(String, Int)] -> [LambdaAst] -> LambdaAst -> Maybe LambdaAst
+replaceVarsInAbsAppParam :: [(String, Int)] -> [LambdaAst] -> LambdaAst -> Either String LambdaAst
 replaceVarsInAbsAppParam reps paramTerms body = do
   let params = (LambdaApplication paramTerms)
   paramsReducedOnce <- lambdaBetaReducedOneStep params
   if (params == paramsReducedOnce) then
-    Nothing
+    Left "replaceVarsInAbsAppParam blew up because we got a fully reduced LambdaApplication"
   else
     replaceVarsInAbs reps paramsReducedOnce body 
 
 -- REDUX
 
-lambdasBetaReducedOneStep :: [LambdaAst] -> Maybe [LambdaAst]
+lambdasBetaReducedOneStep :: [LambdaAst] -> Either String [LambdaAst]
 lambdasBetaReducedOneStep [] =
-  Just []
+  Right []
 
 lambdasBetaReducedOneStep [term] = do
   reducedTerm <- lambdaBetaReducedOneStep term
@@ -98,27 +95,27 @@ lambdasBetaReducedOneStep (term:rest) = do
     return (termReducedOnce:rest)
 
 
-lambdaBetaReducedOneStep :: LambdaAst -> Maybe LambdaAst
+lambdaBetaReducedOneStep :: LambdaAst -> Either String LambdaAst
 lambdaBetaReducedOneStep (LambdaId "cons") =
-  Just (LambdaBif consBif)
+  Right (LambdaBif consBif)
 
 lambdaBetaReducedOneStep (LambdaId "apply") =
-  Just (LambdaBif applyBif)
+  Right (LambdaBif applyBif)
 
 lambdaBetaReducedOneStep (LambdaId "fn") =
-  Just (LambdaBif fnBif)
+  Right (LambdaBif fnBif)
 
 lambdaBetaReducedOneStep (LambdaId "letin") =
-  Just (LambdaBif letinBif)
+  Right (LambdaBif letinBif)
 
 lambdaBetaReducedOneStep lid@(LambdaId _) =
-  Just lid
+  Right lid
 
 lambdaBetaReducedOneStep bif@(LambdaBif _) =
-  Just bif
+  Right bif
 
 lambdaBetaReducedOneStep argRef@(LambdaArgRef _) =
-  Just argRef
+  Right argRef
 
 lambdaBetaReducedOneStep (LambdaList elems) = do
   elemsReducedOnce <- lambdasBetaReducedOneStep elems
@@ -150,17 +147,17 @@ lambdaBetaReducedOneStep (LambdaApplication ((LambdaBif fn):arg:rest)) = do
   return (LambdaApplication (applied:rest))
 
 lambdaBetaReducedOneStep (LambdaApplication []) =
-  Nothing
+  Left "lambdaBetaReducedOneStep blew up because we had no terms in a LambdaApplication"
 
 lambdaBetaReducedOneStep (LambdaApplication [_]) =
-  Nothing
+  Left "lambdaBetaReducedOneStep blew up because we had only one term in a LambdaApplication"
 
 lambdaBetaReducedOneStep (LambdaApplication terms) = do
   termsReducedOnce <- lambdasBetaReducedOneStep terms
   return (LambdaApplication termsReducedOnce)
 
 
-lambdaBetaReducedFull :: LambdaAst -> Maybe LambdaAst
+lambdaBetaReducedFull :: LambdaAst -> Either String LambdaAst
 lambdaBetaReducedFull term = do
   reducedOnce <- lambdaBetaReducedOneStep term
   if term == reducedOnce then do
@@ -168,26 +165,26 @@ lambdaBetaReducedFull term = do
   else do
     lambdaBetaReducedFull reducedOnce
 
-lambdaAppliedTo :: LambdaAst -> LambdaAst -> Maybe LambdaAst
+lambdaAppliedTo :: LambdaAst -> LambdaAst -> Either String LambdaAst
 lambdaAppliedTo = 
   lambdaArgRefReplacedWithLambda 1
 
 
-lambdaArgRefReplacedWithLambda :: Int -> LambdaAst -> LambdaAst -> Maybe LambdaAst
+lambdaArgRefReplacedWithLambda :: Int -> LambdaAst -> LambdaAst -> Either String LambdaAst
 lambdaArgRefReplacedWithLambda _ _ bif@(LambdaBif _) =
-  Just bif
+  Right bif
 
 lambdaArgRefReplacedWithLambda _ _ lid@(LambdaId _) =
-  Just lid
+  Right lid
 
 lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaArgRef argRef) = do
   if argRefReplace == argRef then do
     inced <- lambdaIncrementedArgRefsGreaterThanOrEqual arg 1 argRef
     return inced
   else if argRefReplace < argRef then
-    Just (LambdaArgRef (argRef-1))
+    Right (LambdaArgRef (argRef-1))
   else
-    Just (LambdaArgRef argRef)
+    Right (LambdaArgRef argRef)
 
 lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaList elems) = do
   elemsReplaced <- sequence (map (lambdaArgRefReplacedWithLambda argRefReplace arg) elems)
@@ -206,16 +203,16 @@ lambdaArgRefReplacedWithLambda argRefReplace argReplace (LambdaApplication terms
   return (LambdaApplication termsReplaced)
   
 
-lambdaIncrementedArgRefsGreaterThanOrEqual :: LambdaAst -> Int -> Int -> Maybe LambdaAst
+lambdaIncrementedArgRefsGreaterThanOrEqual :: LambdaAst -> Int -> Int -> Either String LambdaAst
 lambdaIncrementedArgRefsGreaterThanOrEqual bif@(LambdaBif _) _ _ =
-  Just bif
+  Right bif
 
 lambdaIncrementedArgRefsGreaterThanOrEqual lid@(LambdaId _) _ _ =
-  Just lid
+  Right lid
 
 lambdaIncrementedArgRefsGreaterThanOrEqual lar@(LambdaArgRef argRef) argRefPatchMin argRefReplacing
-  | argRef < argRefPatchMin = Just lar
-  | otherwise = Just (LambdaArgRef (argRef + argRefReplacing - 1))
+  | argRef < argRefPatchMin = Right lar
+  | otherwise = Right (LambdaArgRef (argRef + argRefReplacing - 1))
 
 lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaList elems) argRefPatchMin argRefReplacing = do
   let incElems lElem = lambdaIncrementedArgRefsGreaterThanOrEqual lElem argRefPatchMin argRefReplacing
@@ -237,27 +234,31 @@ lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaApplication terms) argRefPatch
 
 -- bifs
 
-consBif :: LambdaAst -> Maybe LambdaAst
-consBif headElem = Just (LambdaBif doIt)
+consBif :: LambdaAst -> Either String LambdaAst
+consBif headElem = Right (LambdaBif doIt)
   where
-    doIt (LambdaList elems) = Just (LambdaList (headElem:elems))
-    doIt _ = Nothing
+    doIt (LambdaList elems) = Right (LambdaList (headElem:elems))
+    doIt _ = Left "consBif blew up because we tried to cons to somthing that was not a list"
 
-applyBif :: LambdaAst -> Maybe LambdaAst
-applyBif (LambdaList elems) = Just (LambdaApplication elems)
-applyBif _ = Nothing
+applyBif :: LambdaAst -> Either String LambdaAst
+applyBif (LambdaList elems) = Right (LambdaApplication elems)
+applyBif _ = Left "applyBif blew up because we tried to 'apply' somthing that was not a list"
 
-fnBif :: LambdaAst ->  Maybe LambdaAst
-fnBif params = Just (LambdaBif (\body -> Just $ LambdaAbstraction params body))
+fnBif :: LambdaAst ->  Either String LambdaAst
+fnBif params = Right (LambdaBif (\body -> Right $ LambdaAbstraction params body))
 
-letinBif :: LambdaAst -> Maybe LambdaAst
+letinBif :: LambdaAst -> Either String LambdaAst
 letinBif decls =
-  Just 
+  Right 
     (LambdaBif
       (\body ->
         case decls of
+          (LambdaList [(LambdaList [a, b])]) -> 
+            (Right 
+              (LambdaApplication [(LambdaAbstraction a body), b])
+            )
           (LambdaList ((LambdaList [a, b]):rest)) -> 
-            (Just 
+            (Right 
               (LambdaApplication 
                 [
                   (LambdaAbstraction a 
@@ -268,10 +269,10 @@ letinBif decls =
               )
             )
           (LambdaList [a, b]) -> 
-            (Just 
+            (Right 
               (LambdaApplication [(LambdaAbstraction a body), b])
             )
-          _ -> Nothing
+          _ -> Left $ "letinBif blew up with decls = " ++ show decls
       )
     )
   

@@ -11,7 +11,7 @@ import Data.Maybe
 import LambdaAst
 import ReduceLambda
 
-unAnonLambda :: LambdaAst -> Maybe LambdaAst
+unAnonLambda :: LambdaAst -> Either String LambdaAst
 unAnonLambda = replaceArgRefsWithVars []
 
 
@@ -23,15 +23,15 @@ varNameFromN :: Int -> String
 varNameFromN n = [toEnum (n + (fromEnum 'a'))]
 
 
-replaceArgRefsWithVars :: [(Int, String)] -> LambdaAst -> Maybe LambdaAst
+replaceArgRefsWithVars :: [(Int, String)] -> LambdaAst -> Either String LambdaAst
 replaceArgRefsWithVars _ bif@(LambdaBif _) =
-  Just bif
+  Right bif
 
 replaceArgRefsWithVars _ lid@(LambdaId _) =
-  Just lid
+  Right lid
 
 replaceArgRefsWithVars replacements (LambdaArgRef argRef) =
-  Just $
+  Right $
     if isJust replacement then
       (LambdaId (fromJust replacement))
     else
