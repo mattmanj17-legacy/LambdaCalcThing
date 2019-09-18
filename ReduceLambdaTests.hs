@@ -234,6 +234,8 @@ reduceLambdaTests = do
   reduceFullTest "rf5" "(letin [a f] (a b c d e))" "(f b c d e)"
   reduceFullTest "rf6" "(letin [[a f] [b g]] (a b c d e))" "(f g c d e)"
 
+  reduceFullTest "rf5" "(letin ((/ s [s f]) a) (a b c d e))" "(f b c d e)"
+
   succExprTest 0
   succExprTest 1
   succExprTest 2

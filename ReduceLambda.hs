@@ -234,6 +234,8 @@ lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaApplication terms) argRefPatch
 
 -- bifs
 
+-- BB ugh, these do not try to reduce their arguments
+
 consBif :: LambdaAst -> Either String LambdaAst
 consBif headElem = Right (LambdaBif doIt)
   where
