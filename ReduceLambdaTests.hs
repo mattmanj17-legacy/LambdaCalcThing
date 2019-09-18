@@ -31,7 +31,7 @@ reduceOnceTest strDesc strIn strOut = do
     return ()
   where
     parsedIn = parseFromStrToMaybe parseLambda strIn
-    parsedOut = parseFromStrToMaybe parseLambda strIn
+    parsedOut = parseFromStrToMaybe parseLambda strOut
     justIn = fromJust parsedIn
     justOut = fromJust parsedOut
     reducedOnce = lambdaBetaReducedOneStep justIn
@@ -226,6 +226,11 @@ reduceLambdaTests = do
     shouldBe
       (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "(a)")))
       Nothing
+
+  reduceOnceTest "ro7" "(cons a [b c])" "[a b c]"
+  reduceOnceTest "ro8" "(apply [a b c])" "(a b c)"
+  reduceOnceTest "ro9" "(fn a a)" "(/ a a)"
+  reduceOnceTest "ro10" "(cons a [])" "[a]"
 
   succExprTest 0
   succExprTest 1
