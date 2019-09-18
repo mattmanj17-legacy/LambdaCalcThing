@@ -24,6 +24,9 @@ varNameFromN n = [toEnum (n + (fromEnum 'a'))]
 
 
 replaceArgRefsWithVars :: [(Int, String)] -> LambdaAst -> Maybe LambdaAst
+replaceArgRefsWithVars _ bif@(LambdaBif _) =
+  Just bif
+
 replaceArgRefsWithVars _ lid@(LambdaId _) =
   Just lid
 

@@ -22,6 +22,7 @@ replaceVars reps repIn =
     (LambdaAbstraction params body) -> replaceVarsInAbs reps params body
     (LambdaAnonAbstraction body) ->  replaceVarsInAnonAbs reps body 
     (LambdaApplication terms) -> replaceVarsInApp reps terms
+    (LambdaBif fn) -> (Just (LambdaBif fn))
 
 replaceVarsInId :: [(String, Int)] -> String -> Maybe LambdaAst
 replaceVarsInId reps str =
@@ -51,6 +52,7 @@ replaceVarsInAbs reps params body =
     (LambdaAbstraction _ _) -> Nothing
     (LambdaAnonAbstraction _) -> Nothing
     (LambdaApplication terms) -> replaceVarsInAbsAppParam reps terms body
+    (LambdaBif _) -> Nothing
 
 replaceVarsInAbsIdParam :: [(String, Int)] -> String -> LambdaAst -> Maybe LambdaAst
 replaceVarsInAbsIdParam reps str body = do
@@ -97,8 +99,23 @@ lambdasBetaReducedOneStep (term:rest) = do
 
 
 lambdaBetaReducedOneStep :: LambdaAst -> Maybe LambdaAst
+lambdaBetaReducedOneStep (LambdaId "cons") =
+  Just (LambdaBif consBif)
+
+lambdaBetaReducedOneStep (LambdaId "apply") =
+  Just (LambdaBif applyBif)
+
+lambdaBetaReducedOneStep (LambdaId "fn") =
+  Just (LambdaBif fnBif)
+
+lambdaBetaReducedOneStep (LambdaId "letin") =
+  Just (LambdaBif letinBif)
+
 lambdaBetaReducedOneStep lid@(LambdaId _) =
   Just lid
+
+lambdaBetaReducedOneStep bif@(LambdaBif _) =
+  Just bif
 
 lambdaBetaReducedOneStep argRef@(LambdaArgRef _) =
   Just argRef
@@ -121,8 +138,15 @@ lambdaBetaReducedOneStep (LambdaAnonAbstraction val) = do
 lambdaBetaReducedOneStep (LambdaApplication [(LambdaAnonAbstraction func), arg]) =
   lambdaAppliedTo arg func
 
+lambdaBetaReducedOneStep (LambdaApplication [(LambdaBif fn), arg]) =
+  fn arg
+
 lambdaBetaReducedOneStep (LambdaApplication ((LambdaAnonAbstraction func):arg:rest)) = do
   applied <- lambdaAppliedTo arg func
+  return (LambdaApplication (applied:rest))
+
+lambdaBetaReducedOneStep (LambdaApplication ((LambdaBif fn):arg:rest)) = do
+  applied <- fn arg
   return (LambdaApplication (applied:rest))
 
 lambdaBetaReducedOneStep (LambdaApplication []) =
@@ -150,6 +174,9 @@ lambdaAppliedTo =
 
 
 lambdaArgRefReplacedWithLambda :: Int -> LambdaAst -> LambdaAst -> Maybe LambdaAst
+lambdaArgRefReplacedWithLambda _ _ bif@(LambdaBif _) =
+  Just bif
+
 lambdaArgRefReplacedWithLambda _ _ lid@(LambdaId _) =
   Just lid
 
@@ -180,6 +207,9 @@ lambdaArgRefReplacedWithLambda argRefReplace argReplace (LambdaApplication terms
   
 
 lambdaIncrementedArgRefsGreaterThanOrEqual :: LambdaAst -> Int -> Int -> Maybe LambdaAst
+lambdaIncrementedArgRefsGreaterThanOrEqual bif@(LambdaBif _) _ _ =
+  Just bif
+
 lambdaIncrementedArgRefsGreaterThanOrEqual lid@(LambdaId _) _ _ =
   Just lid
 
@@ -204,3 +234,44 @@ lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaApplication terms) argRefPatch
   let incTerm term = lambdaIncrementedArgRefsGreaterThanOrEqual term argRefPatchMin argRefReplacing
   incedTerms <- sequence (map incTerm terms)
   return (LambdaApplication incedTerms)
+
+-- bifs
+
+consBif :: LambdaAst -> Maybe LambdaAst
+consBif headElem = Just (LambdaBif doIt)
+  where
+    doIt (LambdaList elems) = Just (LambdaList (headElem:elems))
+    doIt _ = Nothing
+
+applyBif :: LambdaAst -> Maybe LambdaAst
+applyBif (LambdaList elems) = Just (LambdaApplication elems)
+applyBif _ = Nothing
+
+fnBif :: LambdaAst ->  Maybe LambdaAst
+fnBif params = Just (LambdaBif (\body -> Just $ LambdaAbstraction params body))
+
+letinBif :: LambdaAst -> Maybe LambdaAst
+letinBif decls =
+  Just 
+    (LambdaBif
+      (\body ->
+        case decls of
+          (LambdaList ((LambdaList [a, b]):rest)) -> 
+            (Just 
+              (LambdaApplication 
+                [
+                  (LambdaAbstraction a 
+                    (LambdaApplication [(LambdaBif letinBif), (LambdaList rest), body]) 
+                  ),
+                  b
+                ]
+              )
+            )
+          (LambdaList [a, b]) -> 
+            (Just 
+              (LambdaApplication [(LambdaAbstraction a body), b])
+            )
+          _ -> Nothing
+      )
+    )
+  

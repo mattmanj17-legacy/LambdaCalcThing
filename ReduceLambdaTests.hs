@@ -13,8 +13,8 @@ import ReduceLambda
 import ParseLambda
 import ParseCommon
 
-reduceOnceTest :: String -> String -> String -> SpecWith ()
-reduceOnceTest strDesc strIn strOut = do
+reduceFullTest :: String -> String -> String -> SpecWith ()
+reduceFullTest strDesc strIn strOut = do
   it strDesc $ do
     parsedIn `shouldSatisfy` isJust
   it strDesc $ do
@@ -34,7 +34,7 @@ reduceOnceTest strDesc strIn strOut = do
     parsedOut = parseFromStrToMaybe parseLambda strOut
     justIn = fromJust parsedIn
     justOut = fromJust parsedOut
-    reducedOnce = lambdaBetaReducedOneStep justIn
+    reducedOnce = lambdaBetaReducedFull justIn
     justReducedOnced = fromJust reducedOnce
 
 churchNum :: Int -> LambdaAst
@@ -227,10 +227,12 @@ reduceLambdaTests = do
       (lambdaBetaReducedOneStep (fromJust (parseFromStrToMaybe parseLambda "(a)")))
       Nothing
 
-  reduceOnceTest "ro7" "(cons a [b c])" "[a b c]"
-  reduceOnceTest "ro8" "(apply [a b c])" "(a b c)"
-  reduceOnceTest "ro9" "(fn a a)" "(/ a a)"
-  reduceOnceTest "ro10" "(cons a [])" "[a]"
+  reduceFullTest "rf1" "(cons a [b c])" "[a b c]"
+  reduceFullTest "rf2" "(apply [a b c])" "(a b c)" -- this can probably be implimented at user level
+  reduceFullTest "rf3" "(fn a a)" "(% #1)"
+  reduceFullTest "rf4" "(cons a [])" "[a]"
+  reduceFullTest "rf5" "(letin [a f] (a b c d e))" "(f b c d e)"
+  reduceFullTest "rf6" "(letin [[a f] [b g]] (a b c d e))" "(f g c d e)"
 
   succExprTest 0
   succExprTest 1

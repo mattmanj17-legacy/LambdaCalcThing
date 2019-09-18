@@ -16,7 +16,7 @@ unParseLambdaStringTest :: String -> String -> String -> SpecWith ()
 unParseLambdaStringTest strDesc inStr outStr =
   runUnaryTestWithMaybeInput
     strDesc
-    (\sd lambda -> it sd $ do unParseLambda lambda `shouldBe` outStr) 
+    (\sd lambda -> it sd $ do show lambda `shouldBe` outStr) 
     (parseFromStrToMaybe parseLambda inStr)
 
 unParseLambdaStringIdempotentTest :: String ->  String -> SpecWith ()
@@ -25,7 +25,7 @@ unParseLambdaStringIdempotentTest strDesc str =
 
 lambdaAstTests = do
   it "unParseLambda foo" $ do
-    unParseLambda (LambdaId "foo") `shouldBe` "foo"
+    show (LambdaId "foo") `shouldBe` "foo"
   unParseLambdaStringIdempotentTest "upl0" "(/ [foo] bar)"
   unParseLambdaStringIdempotentTest "upl1" "(/ [foo bonk] bar)"
   unParseLambdaStringIdempotentTest "upl2" "(foo bar)"
