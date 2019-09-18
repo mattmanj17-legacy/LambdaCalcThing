@@ -3,15 +3,15 @@ module TestHelpers where
 import Data.Maybe
 import Test.Hspec 
 
-runUnaryTestWithMaybeInput :: Show a => (a -> SpecWith ()) -> Maybe a -> SpecWith ()
-runUnaryTestWithMaybeInput test ma = do
-  it ("check input") $ do
+runUnaryTestWithMaybeInput :: Show a => String -> (String -> a -> SpecWith ()) -> Maybe a -> SpecWith ()
+runUnaryTestWithMaybeInput strDesc test ma = do
+  it strDesc $ do
     ma `shouldSatisfy` isJust
-  maybe (return ()) (test) ma
+  maybe (return ()) (test strDesc) ma
 
 
-runBinaryTestWithMaybeInput :: Show a => (a -> b -> SpecWith ()) -> Maybe a -> b -> SpecWith ()
-runBinaryTestWithMaybeInput test ma b = do
-  it ("check input") $ do
+runBinaryTestWithMaybeInput :: Show a => String ->  (String -> a -> b -> SpecWith ()) -> Maybe a -> b -> SpecWith ()
+runBinaryTestWithMaybeInput strDesc test ma b = do
+  it strDesc $ do
     ma `shouldSatisfy` isJust
-  maybe (return ()) (\a -> test a b) ma
+  maybe (return ()) (\a -> test strDesc a b) ma
