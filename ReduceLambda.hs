@@ -94,22 +94,21 @@ lambdasBetaReducedOneStep (term:rest) = do
   else do
     return (termReducedOnce:rest)
 
+bifMap :: [(String, (LambdaAst -> Either String LambdaAst))]
+bifMap = 
+  [ ("cons", consBif)
+  , ("apply", applyBif)
+  , ("fn", fnBif)
+  , ("letin", letinBif)
+  ]
 
 lambdaBetaReducedOneStep :: LambdaAst -> Either String LambdaAst
-lambdaBetaReducedOneStep (LambdaId "cons") =
-  Right (LambdaBif consBif)
-
-lambdaBetaReducedOneStep (LambdaId "apply") =
-  Right (LambdaBif applyBif)
-
-lambdaBetaReducedOneStep (LambdaId "fn") =
-  Right (LambdaBif fnBif)
-
-lambdaBetaReducedOneStep (LambdaId "letin") =
-  Right (LambdaBif letinBif)
-
-lambdaBetaReducedOneStep lid@(LambdaId _) =
-  Right lid
+lambdaBetaReducedOneStep lid@(LambdaId str) = do
+  let bif = lookup str bifMap
+  if isJust bif then do
+    return $ LambdaBif $ fromJust bif
+  else do
+    return lid
 
 lambdaBetaReducedOneStep bif@(LambdaBif _) =
   Right bif
@@ -234,47 +233,76 @@ lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaApplication terms) argRefPatch
 
 -- bifs
 
--- BB ugh, these do not try to reduce their arguments
+-- BB isPotentialFinalOuterForm feels brittle ... 
+--  wish we could infer this from the redux code
+
+isPotentialFinalOuterForm :: LambdaAst -> LambdaAstKind -> Bool
+isPotentialFinalOuterForm (LambdaId str) =
+  if isJust (lookup str bifMap) then
+    (== KBif)
+  else
+    (== KId)
+
+isPotentialFinalOuterForm (LambdaApplication _) =
+  const True
+
+isPotentialFinalOuterForm (LambdaAbstraction _ _) =
+  (== KAnonAbstraction)
+
+isPotentialFinalOuterForm expr =
+  (== (kindFromLambdaAst expr))
+
+
+tryReduceToList :: LambdaAst -> Either String LambdaAst
+tryReduceToList list@(LambdaList _) = do
+  return list
+
+tryReduceToList expr = do
+  exprReducedOnce <- lambdaBetaReducedOneStep expr
+  if isPotentialFinalOuterForm expr KList && exprReducedOnce /= expr then
+    tryReduceToList exprReducedOnce
+  else
+    (Left "failed to reduce expr to list")
+
 
 consBif :: LambdaAst -> Either String LambdaAst
 consBif headElem = Right (LambdaBif doIt)
   where
-    doIt (LambdaList elems) = Right (LambdaList (headElem:elems))
-    doIt _ = Left "consBif blew up because we tried to cons to somthing that was not a list"
+    doIt expr = do
+      (LambdaList elems) <- tryReduceToList expr
+      return (LambdaList (headElem:elems))
+
 
 applyBif :: LambdaAst -> Either String LambdaAst
-applyBif (LambdaList elems) = Right (LambdaApplication elems)
-applyBif _ = Left "applyBif blew up because we tried to 'apply' somthing that was not a list"
+applyBif expr = do
+  (LambdaList elems) <- tryReduceToList expr
+  return (LambdaApplication elems)
+
 
 fnBif :: LambdaAst ->  Either String LambdaAst
 fnBif params = Right (LambdaBif (\body -> Right $ LambdaAbstraction params body))
 
+
 letinBif :: LambdaAst -> Either String LambdaAst
-letinBif decls =
-  Right 
-    (LambdaBif
-      (\body ->
-        case decls of
-          (LambdaList [(LambdaList [a, b])]) -> 
-            (Right 
-              (LambdaApplication [(LambdaAbstraction a body), b])
+letinBif declsExpr = Right (LambdaBif doIt)
+  where
+    doIt body = do
+      (LambdaList decls) <- tryReduceToList declsExpr
+      case decls of
+        [(LambdaList [a, b])] ->
+          return (LambdaApplication [(LambdaAbstraction a body), b])
+        ((LambdaList [a, b]):rest) ->
+          return
+            (LambdaApplication 
+              [
+                (LambdaAbstraction a 
+                  (LambdaApplication [(LambdaBif letinBif), (LambdaList rest), body]) 
+                ),
+                b
+              ]
             )
-          (LambdaList ((LambdaList [a, b]):rest)) -> 
-            (Right 
-              (LambdaApplication 
-                [
-                  (LambdaAbstraction a 
-                    (LambdaApplication [(LambdaBif letinBif), (LambdaList rest), body]) 
-                  ),
-                  b
-                ]
-              )
-            )
-          (LambdaList [a, b]) -> 
-            (Right 
-              (LambdaApplication [(LambdaAbstraction a body), b])
-            )
-          _ -> Left $ "letinBif blew up with decls = " ++ show decls
-      )
-    )
+        [a, b] -> 
+          return (LambdaApplication [(LambdaAbstraction a body), b])
+        _ -> 
+          Left $ "letinBif blew up with decls = " ++ show decls
   
