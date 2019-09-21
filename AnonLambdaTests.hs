@@ -14,13 +14,16 @@ import LambdaAst
 import ReduceLambda
 import TestHelpers
 
+cmpLambdaForTest :: LambdaAst -> LambdaAst -> Bool
+cmpLambdaForTest = curry $ (boolFromTfn False) . (tfnCompareLambdas <$> fst <*> snd)
+
 anonTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 anonTest strDesc lambdaIn lambdaOut = do
   it strDesc $ do
     anoned `shouldSatisfy` isRight
   if isRight anoned then
     it strDesc $ do
-      justAnoned `shouldBe` lambdaOut
+      cmpLambdaForTest justAnoned lambdaOut `shouldBe` True
   else
     return ()
   where

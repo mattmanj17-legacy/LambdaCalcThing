@@ -71,7 +71,7 @@ replaceVarsInAbsAppParam :: [(String, Int)] -> [LambdaAst] -> LambdaAst -> Eithe
 replaceVarsInAbsAppParam reps paramTerms body = do
   let params = (LambdaApplication paramTerms)
   paramsReducedOnce <- lambdaBetaReducedOneStep params
-  if (params == paramsReducedOnce) then
+  if considerLambdasEqualForRedux params paramsReducedOnce then
     Left "replaceVarsInAbsAppParam blew up because we got a fully reduced LambdaApplication"
   else
     replaceVarsInAbs reps paramsReducedOnce body 
@@ -88,7 +88,7 @@ lambdasBetaReducedOneStep [term] = do
 
 lambdasBetaReducedOneStep (term:rest) = do
   termReducedOnce <- lambdaBetaReducedOneStep term
-  if term == termReducedOnce then do
+  if considerLambdasEqualForRedux term termReducedOnce then do
     restReducedOnce <- lambdasBetaReducedOneStep rest
     return (term:restReducedOnce)
   else do
@@ -122,7 +122,7 @@ lambdaBetaReducedOneStep (LambdaList elems) = do
 
 lambdaBetaReducedOneStep abstraction@(LambdaAbstraction params body) = do
   paramsReducedOnce <- lambdaBetaReducedOneStep params
-  if (paramsReducedOnce == params) then do
+  if considerLambdasEqualForRedux paramsReducedOnce params then do
     anonLambda abstraction
   else do
     return (LambdaAbstraction paramsReducedOnce body)
@@ -159,7 +159,7 @@ lambdaBetaReducedOneStep (LambdaApplication terms) = do
 lambdaBetaReducedFull :: LambdaAst -> Either String LambdaAst
 lambdaBetaReducedFull term = do
   reducedOnce <- lambdaBetaReducedOneStep term
-  if term == reducedOnce then do
+  if considerLambdasEqualForRedux term reducedOnce then do
     return term
   else do
     lambdaBetaReducedFull reducedOnce
@@ -253,13 +253,16 @@ isPotentialFinalOuterForm expr =
   (== (kindFromLambdaAst expr))
 
 
+considerLambdasEqualForRedux :: LambdaAst -> LambdaAst -> Bool
+considerLambdasEqualForRedux = curry $ (boolFromTfn True) . (tfnCompareLambdas <$> fst <*> snd)
+
 tryReduceToList :: LambdaAst -> Either String LambdaAst
 tryReduceToList list@(LambdaList _) = do
   return list
 
 tryReduceToList expr = do
   exprReducedOnce <- lambdaBetaReducedOneStep expr
-  if isPotentialFinalOuterForm expr KList && exprReducedOnce /= expr then
+  if isPotentialFinalOuterForm expr KList && not (considerLambdasEqualForRedux exprReducedOnce expr) then
     tryReduceToList exprReducedOnce
   else
     (Left "failed to reduce expr to list")

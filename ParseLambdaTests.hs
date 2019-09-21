@@ -16,21 +16,29 @@ import ParseLambda
 import LambdaAst
 
 parseTests :: 
-  (Show a, Eq a) => 
+  (Show a) => 
+  (a -> a -> Bool) ->
   (String -> Either ParseError a) -> 
   (String -> String -> a -> SpecWith (), String -> String -> SpecWith ())
-parseTests parseFn =
+parseTests eqFn parseFn =
   (pass, fail)
   where
     pass strDesc strInput expect =
       it strDesc $ do 
-        (parseFn strInput) `shouldBe` (Right expect)
+        let parsed = parseFn strInput
+        parsed `shouldSatisfy` isRight
+        if isLeft parsed then do
+          return ()
+        else
+          eqFn (fromRight undefined parsed) expect `shouldBe` True
     fail strDesc strInput =
       it strDesc $ do 
         (parseFn strInput) `shouldNotSatisfy` isRight
 
 (passLambda, failLambda) = 
-  parseTests (parseFromStr parseLambda)
+  parseTests 
+    (curry ((boolFromTfn False) . (tfnCompareLambdas <$> fst <*> snd)))
+    (parseFromStr parseLambda)
 
 parseLambdaTests = do
   passLambda "pl0"

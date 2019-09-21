@@ -15,13 +15,16 @@ import TestHelpers
 import ParseCommon
 import ParseLambda
 
+cmpLambdaForTest' :: LambdaAst -> LambdaAst -> Bool
+cmpLambdaForTest' = curry $ (boolFromTfn False) . (tfnCompareLambdas <$> fst <*> snd)
+
 unAnonLambdaTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 unAnonLambdaTest strDesc lambdaIn lambdaOut = do
   it strDesc $ do
     unanoned `shouldSatisfy` isRight
   if isRight unanoned then
     it strDesc $ do
-      justUnanoned `shouldBe` lambdaOut
+      cmpLambdaForTest justUnanoned lambdaOut `shouldBe` True
   else
     return ()
   where

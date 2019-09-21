@@ -24,7 +24,7 @@ reduceFullTest strDesc strIn strOut = do
       reducedOnce `shouldSatisfy` isRight
     if isRight reducedOnce then
       it strDesc $ do
-        justReducedOnced `shouldBe` justOut
+        cmpLambdaForTest justReducedOnced justOut `shouldBe` True 
     else
       return ()
   else
@@ -43,13 +43,16 @@ churchNum n = (LambdaAnonAbstraction (LambdaAnonAbstraction (churchNumHelper n))
     churchNumHelper 0 = (LambdaArgRef 1)
     churchNumHelper m = (LambdaApplication [(LambdaArgRef 2), (churchNumHelper (m-1))])
 
+cmpLambdaForTest :: LambdaAst -> LambdaAst -> Bool
+cmpLambdaForTest = curry $ (boolFromTfn False) . (tfnCompareLambdas <$> fst <*> snd)
+
 intUnaryOpTest :: String -> LambdaAst -> (Int -> Int) -> Int -> SpecWith ()
 intUnaryOpTest strDesc expr op a = do
   it strDesc $ do 
     reduced `shouldSatisfy` isRight
   if isRight reduced then
     it strDesc $ do 
-      justReduced `shouldBe` (churchNum (op a))
+      cmpLambdaForTest justReduced (churchNum (op a)) `shouldBe` True
   else
     return ()
   where
@@ -112,13 +115,18 @@ intBinaryOpTest :: String -> LambdaAst -> (Int -> Int -> Int) -> Int -> Int -> S
 intBinaryOpTest strDesc expr op a b =
   it strDesc $ do 
     shouldBe
-      (lambdaBetaReducedFull 
-        (LambdaApplication 
-          [(LambdaApplication [expr, (churchNum a)]), 
-          (churchNum b)]
-        )
-      )  
-      (Right (churchNum (op a b)))
+      (cmpLambdaForTest
+        (fromRight undefined
+          (lambdaBetaReducedFull 
+            (LambdaApplication 
+              [(LambdaApplication [expr, (churchNum a)]), 
+              (churchNum b)]
+            )
+          ) 
+        ) 
+        (churchNum (op a b))
+      )
+      True
 
 addOperator = 
   (LambdaAnonAbstraction 
