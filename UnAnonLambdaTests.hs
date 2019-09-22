@@ -14,9 +14,7 @@ import UnAnonLambda
 import TestHelpers
 import ParseCommon
 import ParseLambda
-
-cmpLambdaForTest' :: LambdaAst -> LambdaAst -> Bool
-cmpLambdaForTest' = curry $ (boolFromTfn False) . (tfnCompareLambdas <$> fst <*> snd)
+import LambdaTestHelpers
 
 unAnonLambdaTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 unAnonLambdaTest strDesc lambdaIn lambdaOut = do

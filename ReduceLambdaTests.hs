@@ -12,6 +12,7 @@ import LambdaAst
 import ReduceLambda
 import ParseLambda
 import ParseCommon
+import LambdaTestHelpers
 
 reduceFullTest :: String -> String -> String -> SpecWith ()
 reduceFullTest strDesc strIn strOut = do
@@ -42,9 +43,6 @@ churchNum n = (LambdaAnonAbstraction (LambdaAnonAbstraction (churchNumHelper n))
   where
     churchNumHelper 0 = (LambdaArgRef 1)
     churchNumHelper m = (LambdaApplication [(LambdaArgRef 2), (churchNumHelper (m-1))])
-
-cmpLambdaForTest :: LambdaAst -> LambdaAst -> Bool
-cmpLambdaForTest = curry $ (boolFromTfn False) . (tfnCompareLambdas <$> fst <*> snd)
 
 intUnaryOpTest :: String -> LambdaAst -> (Int -> Int) -> Int -> SpecWith ()
 intUnaryOpTest strDesc expr op a = do

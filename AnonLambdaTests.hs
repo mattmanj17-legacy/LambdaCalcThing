@@ -13,9 +13,7 @@ import ParseLambda
 import LambdaAst
 import ReduceLambda
 import TestHelpers
-
-cmpLambdaForTest :: LambdaAst -> LambdaAst -> Bool
-cmpLambdaForTest = curry $ (boolFromTfn False) . (tfnCompareLambdas <$> fst <*> snd)
+import LambdaTestHelpers
 
 anonTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 anonTest strDesc lambdaIn lambdaOut = do
