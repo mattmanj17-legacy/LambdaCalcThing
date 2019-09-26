@@ -237,26 +237,6 @@ lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaApplication terms) argRefPatch
 
 -- bifs
 
--- BB isPotentialFinalOuterForm feels brittle ... 
---  wish we could infer this from the redux code
-
-isPotentialFinalOuterForm :: LambdaAst -> LambdaAstKind -> Bool
-isPotentialFinalOuterForm (LambdaId str) =
-  if isJust (lookup str bifMap) then
-    (== KBif)
-  else
-    (== KId)
-
-isPotentialFinalOuterForm (LambdaApplication _) =
-  const True
-
-isPotentialFinalOuterForm (LambdaAbstraction _ _) =
-  (== KAnonAbstraction)
-
-isPotentialFinalOuterForm expr =
-  (== (kindFromLambdaAst expr))
-
-
 considerLambdasEqualForRedux :: LambdaAst -> LambdaAst -> Bool
 considerLambdasEqualForRedux = curry $ (boolFromTfn True) . (tfnCompareLambdas <$> fst <*> snd)
 
@@ -266,7 +246,7 @@ tryReduceToList list@(LambdaList _) = do
 
 tryReduceToList expr = do
   exprReducedOnce <- lambdaBetaReducedOneStep expr
-  if isPotentialFinalOuterForm expr KList && not (considerLambdasEqualForRedux exprReducedOnce expr) then
+  if not (considerLambdasEqualForRedux exprReducedOnce expr) then
     tryReduceToList exprReducedOnce
   else
     (fail "failed to reduce expr to list")

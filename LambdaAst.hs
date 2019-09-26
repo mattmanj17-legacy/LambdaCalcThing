@@ -41,18 +41,6 @@ instance Monad EitherStringOr where
 instance MonadFail EitherStringOr where
   fail str = EitherStringOr (Left str)
 
--- BB should probably try to gen this kind goo with template haskell
-
-data LambdaAstKind =
-  KId |
-  KArgRef |
-  KList |
-  KAbstraction |
-  KAnonAbstraction |
-  KApplication |
-  KBif 
-  deriving(Show, Eq)
-
 data LambdaAst =
   LambdaId String |
   LambdaArgRef Int |
@@ -61,15 +49,6 @@ data LambdaAst =
   LambdaAnonAbstraction LambdaAst |
   LambdaApplication [LambdaAst] |
   LambdaBif (LambdaAst -> EitherStringOr LambdaAst)
-
-kindFromLambdaAst :: LambdaAst -> LambdaAstKind
-kindFromLambdaAst (LambdaId _)              = KId
-kindFromLambdaAst (LambdaArgRef _)          = KArgRef
-kindFromLambdaAst (LambdaList _)            = KList
-kindFromLambdaAst (LambdaAbstraction _ _)   = KAbstraction
-kindFromLambdaAst (LambdaAnonAbstraction _) = KAnonAbstraction
-kindFromLambdaAst (LambdaApplication _)     = KApplication
-kindFromLambdaAst (LambdaBif _)             = KBif
 
 instance Show LambdaAst where
   show (LambdaId str) = 
