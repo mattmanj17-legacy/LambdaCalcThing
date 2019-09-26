@@ -1,9 +1,14 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module ReduceLambda where
 
 import LambdaAst
 import Data.Maybe
+import Control.Monad.Fail
+
+instance MonadFail (Either String) where
+  fail str = Left str
 
 -- ANON
 
