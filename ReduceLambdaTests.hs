@@ -22,8 +22,8 @@ reduceFullTest strDesc strIn strOut = do
     parsedOut `shouldSatisfy` isRight
   if isRight parsedIn && isRight parsedOut then do
     it strDesc $ do
-      reducedOnce `shouldSatisfy` isRight
-    if isRight reducedOnce then
+      reducedOnce `shouldSatisfy` isEsRight
+    if isEsRight reducedOnce then
       it strDesc $ do
         cmpLambdaForTest justReducedOnced justOut `shouldBe` True 
     else
@@ -36,7 +36,7 @@ reduceFullTest strDesc strIn strOut = do
     justIn = fromRightUnsafe parsedIn
     justOut = fromRightUnsafe parsedOut
     reducedOnce = lambdaBetaReducedFull justIn
-    justReducedOnced = fromRightUnsafe reducedOnce
+    justReducedOnced = fromEsRightUnsafe reducedOnce
 
 churchNum :: Int -> LambdaAst
 churchNum n = (LambdaAnonAbstraction (LambdaAnonAbstraction (churchNumHelper n)))
@@ -47,15 +47,15 @@ churchNum n = (LambdaAnonAbstraction (LambdaAnonAbstraction (churchNumHelper n))
 intUnaryOpTest :: String -> LambdaAst -> (Int -> Int) -> Int -> SpecWith ()
 intUnaryOpTest strDesc expr op a = do
   it strDesc $ do 
-    reduced `shouldSatisfy` isRight
-  if isRight reduced then
+    reduced `shouldSatisfy` isEsRight
+  if isEsRight reduced then
     it strDesc $ do 
       cmpLambdaForTest justReduced (churchNum (op a)) `shouldBe` True
   else
     return ()
   where
     reduced = lambdaBetaReducedFull (LambdaApplication [expr, (churchNum a)])
-    justReduced = fromRightUnsafe reduced
+    justReduced = fromEsRightUnsafe reduced
 
 succOperator = 
   (LambdaAnonAbstraction 
@@ -114,7 +114,7 @@ intBinaryOpTest strDesc expr op a b =
   it strDesc $ do 
     shouldBe
       (cmpLambdaForTest
-        (fromRight undefined
+        (fromEsRightUnsafe
           (lambdaBetaReducedFull 
             (LambdaApplication 
               [(LambdaApplication [expr, (churchNum a)]), 
@@ -206,32 +206,32 @@ reduceLambdaTests = do
   it "ro0" $ do 
     shouldNotSatisfy
       (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ #1 a)) s)")))
-      isRight
+      isEsRight
 
   it "ro1" $ do 
     shouldNotSatisfy
       (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ (/ b b) a)) s)")))
-      isRight
+      isEsRight
 
   it "ro2" $ do 
     shouldNotSatisfy
       (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ (% #1) a)) s)")))
-      isRight
+      isEsRight
 
   it "ro3" $ do 
     shouldNotSatisfy
       (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ [] a)) s)")))
-      isRight
+      isEsRight
 
   it "ro4" $ do 
     shouldNotSatisfy
       (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "((% (/ (b b) a)) s)")))
-      isRight
+      isEsRight
 
   it "ro5" $ do 
     shouldNotSatisfy
       (lambdaBetaReducedOneStep (fromRightUnsafe (parseFromStrToEither parseLambda "(a)")))
-      isRight
+      isEsRight
 
   reduceFullTest "rf1" "(cons a [b c])" "[a b c]"
   reduceFullTest "rf2" "(apply [a b c])" "(a b c)" -- this can probably be implimented at user level

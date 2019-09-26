@@ -4,6 +4,43 @@ module LambdaAst where
 
 import Data.List
 
+import Prelude hiding (fail)
+import Control.Monad.Fail
+
+newtype EitherStringOr a = EitherStringOr (Either String a)
+
+instance Show a => Show (EitherStringOr a) where
+  show (EitherStringOr ea) = show ea
+
+eitherFromEitherStringOr :: EitherStringOr a -> Either String a
+eitherFromEitherStringOr (EitherStringOr a) = a
+
+isEsRight :: EitherStringOr a -> Bool
+isEsRight = not . isEsLeft
+
+fromEsRightUnsafe :: EitherStringOr a -> a
+fromEsRightUnsafe (EitherStringOr (Right a)) = a
+fromEsRightUnsafe _ = undefined
+
+isEsLeft :: EitherStringOr a -> Bool
+isEsLeft (EitherStringOr (Left _)) = True
+isEsLeft _ = False
+
+instance Functor EitherStringOr where
+  fmap fn (EitherStringOr a) = EitherStringOr $ fmap fn a
+
+instance Applicative EitherStringOr where
+  pure a = EitherStringOr $ Right a
+  (<*>) (EitherStringOr (Left str)) _ = (EitherStringOr (Left str))
+  (<*>) (EitherStringOr (Right fn)) a = fmap fn a
+
+instance Monad EitherStringOr where
+  (>>=) (EitherStringOr a) fn = EitherStringOr $ (>>=) a (eitherFromEitherStringOr . fn)
+  (>>) (EitherStringOr a) (EitherStringOr b) = EitherStringOr $ (>>) a b
+
+instance MonadFail EitherStringOr where
+  fail str = EitherStringOr (Left str)
+
 -- BB should probably try to gen this kind goo with template haskell
 
 data LambdaAstKind =
@@ -23,7 +60,7 @@ data LambdaAst =
   LambdaAbstraction LambdaAst LambdaAst |
   LambdaAnonAbstraction LambdaAst |
   LambdaApplication [LambdaAst] |
-  LambdaBif (LambdaAst -> Either String LambdaAst)
+  LambdaBif (LambdaAst -> EitherStringOr LambdaAst)
 
 kindFromLambdaAst :: LambdaAst -> LambdaAstKind
 kindFromLambdaAst (LambdaId _)              = KId

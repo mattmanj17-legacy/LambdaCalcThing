@@ -19,15 +19,15 @@ import LambdaTestHelpers
 unAnonLambdaTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 unAnonLambdaTest strDesc lambdaIn lambdaOut = do
   it strDesc $ do
-    unanoned `shouldSatisfy` isRight
-  if isRight unanoned then
+    unanoned `shouldSatisfy` isEsRight
+  if isEsRight unanoned then
     it strDesc $ do
       cmpLambdaForTest justUnanoned lambdaOut `shouldBe` True
   else
     return ()
   where
     unanoned = unAnonLambda lambdaIn
-    justUnanoned = fromRightUnsafe unanoned
+    justUnanoned = fromEsRightUnsafe unanoned
 
 maybeLambdaToLambdaTest :: String -> Either String LambdaAst -> LambdaAst -> SpecWith ()
 maybeLambdaToLambdaTest strDesc = runBinaryTestWithMaybeInput strDesc unAnonLambdaTest

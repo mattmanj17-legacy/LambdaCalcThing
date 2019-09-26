@@ -18,15 +18,15 @@ import LambdaTestHelpers
 anonTest :: String -> LambdaAst -> LambdaAst -> SpecWith ()
 anonTest strDesc lambdaIn lambdaOut = do
   it strDesc $ do
-    anoned `shouldSatisfy` isRight
-  if isRight anoned then
+    anoned `shouldSatisfy` isEsRight
+  if isEsRight anoned then
     it strDesc $ do
       cmpLambdaForTest justAnoned lambdaOut `shouldBe` True
   else
     return ()
   where
     anoned = anonLambda lambdaIn
-    justAnoned = fromRightUnsafe anoned
+    justAnoned = fromEsRightUnsafe anoned
 
 anonMaybeLambdaToLambdaTest :: String -> Either String LambdaAst -> LambdaAst -> SpecWith ()
 anonMaybeLambdaToLambdaTest strDesc = runBinaryTestWithMaybeInput strDesc anonTest
@@ -66,11 +66,11 @@ anonLambdaTests = do
     "(/ [x] x)"
     "(% #1)"
   it "al7" $ do
-    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [x] (/ [x] x))"))) `shouldNotSatisfy` isRight
+    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [x] (/ [x] x))"))) `shouldNotSatisfy` isEsRight
   it "al8" $ do
-    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [x x] x)"))) `shouldNotSatisfy` isRight
+    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [x x] x)"))) `shouldNotSatisfy` isEsRight
   it "al9" $ do
-    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [a b c] (/ [c d e] e))"))) `shouldNotSatisfy` isRight
+    (anonLambda (fromRightUnsafe (parseFromStrToEither parseLambda "(/ [a b c] (/ [c d e] e))"))) `shouldNotSatisfy` isEsRight
   anonLambdaStrToStrTest "al10"
     "(/ [y] (/ [x] (x y)))"
     "(% (% (#1 #2)))"
