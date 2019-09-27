@@ -204,20 +204,14 @@
 
 	-- pred
 
-	(fn n 
-		(fn f 
-			(fn x 
-				(
-					n 
-					(fn g 
-						(fn h 
-							(h (g f))
-						)
-					)
-					(fn u x) 
-					(fn u u)
-				)
+	(fn [n f x]
+		(
+			n 
+			(fn [g h] 
+				(h (g f))
 			)
+			(fn u x) 
+			(fn u u)
 		)
 	)
 
