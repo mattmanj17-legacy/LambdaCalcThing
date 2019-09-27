@@ -11,78 +11,53 @@ import Control.Monad.Fail
 
 -- ANON
 
-anonLambda :: LambdaAst -> EitherStringOr LambdaAst
+anonLambda :: LambdaParsed -> EitherStringOr LambdaCompiled
 anonLambda = replaceVars []
 
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
-replaceVars :: [(String, Int)] -> LambdaAst -> EitherStringOr LambdaAst
+replaceVars :: [(String, Int)] -> LambdaParsed -> EitherStringOr LambdaCompiled
 replaceVars reps repIn =
   case repIn of
-    (LambdaId str) -> replaceVarsInId reps str
-    (LambdaArgRef argRef) -> (return (LambdaArgRef argRef))
-    (LambdaList elems) -> replaceVarsInList reps elems
-    (LambdaAbstraction params body) -> replaceVarsInAbs reps params body
-    (LambdaAnonAbstraction body) ->  replaceVarsInAnonAbs reps body 
-    (LambdaApplication terms) -> replaceVarsInApp reps terms
-    (LambdaBif fn) -> (return (LambdaBif fn))
+    (LambdaParsedId str) -> replaceVarsInId reps str
+    (LambdaParsedList elems) -> replaceVarsInList reps elems
+    (LambdaParsedApplication terms) -> replaceVarsInApp reps terms
 
-replaceVarsInId :: [(String, Int)] -> String -> EitherStringOr LambdaAst
+replaceVarsInId :: [(String, Int)] -> String -> EitherStringOr LambdaCompiled
 replaceVarsInId reps str =
-  return $ maybe (LambdaId str) LambdaArgRef (lookup str reps)
+  maybe (fail $ "could not find " ++ str) (return . LambdaCompiledArgRef) (lookup str reps)
 
-replaceVarsInList :: [(String, Int)] -> [LambdaAst] -> EitherStringOr LambdaAst
+replaceVarsInList :: [(String, Int)] -> [LambdaParsed] -> EitherStringOr LambdaCompiled
 replaceVarsInList reps elems = do
   newElems <- sequence $ map (replaceVars reps) elems
-  return $ LambdaList newElems
+  return $ LambdaCompiledList newElems
 
-replaceVarsInApp :: [(String, Int)] -> [LambdaAst] -> EitherStringOr LambdaAst
+replaceVarsInApp :: [(String, Int)] -> [LambdaParsed] -> EitherStringOr LambdaCompiled
+replaceVarsInApp reps [(LambdaParsedId "fn"), (LambdaParsedId arg), body] =
+  replaceVarsInAbsIdParam reps arg body
 replaceVarsInApp reps terms = do
   newTerms <- sequence $ map (replaceVars reps) terms
-  return $ LambdaApplication newTerms
+  return $ nestApps newTerms
 
-replaceVarsInAnonAbs :: [(String, Int)] -> LambdaAst -> EitherStringOr LambdaAst
-replaceVarsInAnonAbs reps body = do
-  newBody <- replaceVars (incReps reps) body
-  return (LambdaAnonAbstraction newBody)
-
-replaceVarsInAbs :: [(String, Int)] -> LambdaAst -> LambdaAst -> EitherStringOr LambdaAst
-replaceVarsInAbs reps params body =
-  case params of
-    (LambdaId str) -> replaceVarsInAbsIdParam reps str body
-    (LambdaList elems) -> replaceVarsInAbsListParam reps elems body
-    (LambdaApplication terms) -> replaceVarsInAbsAppParam reps terms body
-    _ -> fail $ "replaceVarsInAbs blew up on " ++ (show params) ++ " params"
-
-replaceVarsInAbsIdParam :: [(String, Int)] -> String -> LambdaAst -> EitherStringOr LambdaAst
+replaceVarsInAbsIdParam :: [(String, Int)] -> String -> LambdaParsed -> EitherStringOr LambdaCompiled
 replaceVarsInAbsIdParam reps str body = do
   if isJust $ lookup str reps then
     fail "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body
-    return (LambdaAnonAbstraction newBody)
+    return (LambdaCompiledAbstraction newBody)
 
-replaceVarsInAbsListParam :: [(String, Int)] -> [LambdaAst] -> LambdaAst -> EitherStringOr LambdaAst
-replaceVarsInAbsListParam reps paramElems body =
-  case paramElems of
-    [] -> fail "replaceVarsInAbsListParam blew up because we got an empty params list"
-    [singleElem] -> replaceVarsInAbs reps singleElem body
-    (firstElem:rest) -> replaceVarsInAbs reps firstElem (LambdaAbstraction (LambdaList rest) body)
-
-replaceVarsInAbsAppParam :: [(String, Int)] -> [LambdaAst] -> LambdaAst -> EitherStringOr LambdaAst
-replaceVarsInAbsAppParam reps paramTerms body = do
-  let params = (LambdaApplication paramTerms)
-  paramsReducedOnce <- lambdaBetaReducedOneStep params
-  if considerLambdasEqualForRedux params paramsReducedOnce then
-    fail "replaceVarsInAbsAppParam blew up because we got a fully reduced LambdaApplication"
-  else
-    replaceVarsInAbs reps paramsReducedOnce body 
+nestApps :: [LambdaCompiled] -> LambdaCompiled
+nestApps [] = undefined
+nestApps [_] = undefined
+nestApps [a, b] = LambdaCompiledApplication a b
+nestApps (a:b:rest) = nestApps ((nestApps [a, b]):rest)
 
 -- REDUX
 
-lambdasBetaReducedOneStep :: [LambdaAst] -> EitherStringOr [LambdaAst]
+lambdasBetaReducedOneStep :: [LambdaCompiled] -> EitherStringOr [LambdaCompiled]
 lambdasBetaReducedOneStep [] =
   return []
 
@@ -92,204 +67,85 @@ lambdasBetaReducedOneStep [term] = do
 
 lambdasBetaReducedOneStep (term:rest) = do
   termReducedOnce <- lambdaBetaReducedOneStep term
-  if considerLambdasEqualForRedux term termReducedOnce then do
+  if term == termReducedOnce then do
     restReducedOnce <- lambdasBetaReducedOneStep rest
     return (term:restReducedOnce)
   else do
     return (termReducedOnce:rest)
 
-bifMap :: [(String, (LambdaAst -> EitherStringOr LambdaAst))]
-bifMap = 
-  [ ("cons", consBif)
-  , ("apply", applyBif)
-  , ("fn", fnBif)
-  , ("letin", letinBif)
-  ]
-
-lambdaBetaReducedOneStep :: LambdaAst -> EitherStringOr LambdaAst
-lambdaBetaReducedOneStep lid@(LambdaId str) = do
-  let bif = lookup str bifMap
-  if isJust bif then do
-    return $ LambdaBif $ fromJust bif
-  else do
-    return lid
-
-lambdaBetaReducedOneStep bif@(LambdaBif _) =
-  return bif
-
-lambdaBetaReducedOneStep argRef@(LambdaArgRef _) =
+lambdaBetaReducedOneStep :: LambdaCompiled -> EitherStringOr LambdaCompiled
+lambdaBetaReducedOneStep argRef@(LambdaCompiledArgRef _) =
   return argRef
 
-lambdaBetaReducedOneStep (LambdaList elems) = do
+lambdaBetaReducedOneStep (LambdaCompiledList elems) = do
   elemsReducedOnce <- lambdasBetaReducedOneStep elems
-  return (LambdaList elemsReducedOnce)
+  return (LambdaCompiledList elemsReducedOnce)
 
-lambdaBetaReducedOneStep abstraction@(LambdaAbstraction params body) = do
-  paramsReducedOnce <- lambdaBetaReducedOneStep params
-  if considerLambdasEqualForRedux paramsReducedOnce params then do
-    anonLambda abstraction
-  else do
-    return (LambdaAbstraction paramsReducedOnce body)
-
-lambdaBetaReducedOneStep (LambdaAnonAbstraction val) = do
+lambdaBetaReducedOneStep (LambdaCompiledAbstraction val) = do
   reducedValOnce <- lambdaBetaReducedOneStep val
-  return (LambdaAnonAbstraction reducedValOnce)
+  return (LambdaCompiledAbstraction reducedValOnce)
 
-lambdaBetaReducedOneStep (LambdaApplication [(LambdaAnonAbstraction func), arg]) =
+lambdaBetaReducedOneStep (LambdaCompiledApplication (LambdaCompiledAbstraction func) arg) =
   lambdaAppliedTo arg func
 
-lambdaBetaReducedOneStep (LambdaApplication [(LambdaBif fn), arg]) =
-  fn arg
-
-lambdaBetaReducedOneStep (LambdaApplication ((LambdaAnonAbstraction func):arg:rest)) = do
-  applied <- lambdaAppliedTo arg func
-  return (LambdaApplication (applied:rest))
-
-lambdaBetaReducedOneStep (LambdaApplication ((LambdaBif fn):arg:rest)) = do
-  applied <- fn arg
-  return (LambdaApplication (applied:rest))
-
-lambdaBetaReducedOneStep (LambdaApplication []) =
-  fail "lambdaBetaReducedOneStep blew up because we had no terms in a LambdaApplication"
-
-lambdaBetaReducedOneStep (LambdaApplication [_]) =
-  fail "lambdaBetaReducedOneStep blew up because we had only one term in a LambdaApplication"
-
-lambdaBetaReducedOneStep (LambdaApplication terms) = do
-  termsReducedOnce <- lambdasBetaReducedOneStep terms
-  return (LambdaApplication termsReducedOnce)
+lambdaBetaReducedOneStep (LambdaCompiledApplication func arg) = do
+  [newFunc, newArg] <- lambdasBetaReducedOneStep [func, arg]
+  return (LambdaCompiledApplication newFunc newArg)
 
 
-lambdaBetaReducedFull :: LambdaAst -> EitherStringOr LambdaAst
+lambdaBetaReducedFull :: LambdaCompiled -> EitherStringOr LambdaCompiled
 lambdaBetaReducedFull term = do
   reducedOnce <- lambdaBetaReducedOneStep term
-  if considerLambdasEqualForRedux term reducedOnce then do
+  if term == reducedOnce then do
     return term
   else do
     lambdaBetaReducedFull reducedOnce
 
-lambdaAppliedTo :: LambdaAst -> LambdaAst -> EitherStringOr LambdaAst
+lambdaAppliedTo :: LambdaCompiled -> LambdaCompiled -> EitherStringOr LambdaCompiled
 lambdaAppliedTo = 
   lambdaArgRefReplacedWithLambda 1
 
 
-lambdaArgRefReplacedWithLambda :: Int -> LambdaAst -> LambdaAst -> EitherStringOr LambdaAst
-lambdaArgRefReplacedWithLambda _ _ bif@(LambdaBif _) =
-  return bif
-
-lambdaArgRefReplacedWithLambda _ _ lid@(LambdaId _) =
-  return lid
-
-lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaArgRef argRef) = do
+lambdaArgRefReplacedWithLambda :: Int -> LambdaCompiled -> LambdaCompiled -> EitherStringOr LambdaCompiled
+lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaCompiledArgRef argRef) = do
   if argRefReplace == argRef then do
     inced <- lambdaIncrementedArgRefsGreaterThanOrEqual arg 1 argRef
     return inced
   else if argRefReplace < argRef then
-    return (LambdaArgRef (argRef-1))
+    return (LambdaCompiledArgRef (argRef-1))
   else
-    return (LambdaArgRef argRef)
+    return (LambdaCompiledArgRef argRef)
 
-lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaList elems) = do
+lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaCompiledList elems) = do
   elemsReplaced <- sequence (map (lambdaArgRefReplacedWithLambda argRefReplace arg) elems)
-  return (LambdaList elemsReplaced)
+  return (LambdaCompiledList elemsReplaced)
 
-lambdaArgRefReplacedWithLambda argRefReplace arg abstraction@(LambdaAbstraction _ _) = do
-  anoned <- anonLambda abstraction
-  lambdaArgRefReplacedWithLambda argRefReplace arg anoned
-
-lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaAnonAbstraction body) = do
+lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaCompiledAbstraction body) = do
   newBody <- lambdaArgRefReplacedWithLambda (argRefReplace+1) arg body
-  return (LambdaAnonAbstraction newBody)
+  return (LambdaCompiledAbstraction newBody)
 
-lambdaArgRefReplacedWithLambda argRefReplace argReplace (LambdaApplication terms) = do
-  termsReplaced <- sequence (map (lambdaArgRefReplacedWithLambda argRefReplace argReplace) terms)
-  return (LambdaApplication termsReplaced)
+lambdaArgRefReplacedWithLambda argRefReplace argReplace (LambdaCompiledApplication func arg) = do
+  funcReplaced <- lambdaArgRefReplacedWithLambda argRefReplace argReplace func
+  argReplaced <- lambdaArgRefReplacedWithLambda argRefReplace argReplace arg
+  return (LambdaCompiledApplication funcReplaced argReplaced)
   
 
-lambdaIncrementedArgRefsGreaterThanOrEqual :: LambdaAst -> Int -> Int -> EitherStringOr LambdaAst
-lambdaIncrementedArgRefsGreaterThanOrEqual bif@(LambdaBif _) _ _ =
-  return bif
-
-lambdaIncrementedArgRefsGreaterThanOrEqual lid@(LambdaId _) _ _ =
-  return lid
-
-lambdaIncrementedArgRefsGreaterThanOrEqual lar@(LambdaArgRef argRef) argRefPatchMin argRefReplacing
+lambdaIncrementedArgRefsGreaterThanOrEqual :: LambdaCompiled -> Int -> Int -> EitherStringOr LambdaCompiled
+lambdaIncrementedArgRefsGreaterThanOrEqual lar@(LambdaCompiledArgRef argRef) argRefPatchMin argRefReplacing
   | argRef < argRefPatchMin = return lar
-  | otherwise = return (LambdaArgRef (argRef + argRefReplacing - 1))
+  | otherwise = return (LambdaCompiledArgRef (argRef + argRefReplacing - 1))
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaList elems) argRefPatchMin argRefReplacing = do
+lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaCompiledList elems) argRefPatchMin argRefReplacing = do
   let incElems lElem = lambdaIncrementedArgRefsGreaterThanOrEqual lElem argRefPatchMin argRefReplacing
   incedElems <- sequence (map incElems elems)
-  return (LambdaList incedElems)
+  return (LambdaCompiledList incedElems)
 
-lambdaIncrementedArgRefsGreaterThanOrEqual abstraction@(LambdaAbstraction _ _) argRefPatchMin argRefReplacing = do
-  anoned <- anonLambda abstraction
-  lambdaIncrementedArgRefsGreaterThanOrEqual anoned argRefPatchMin argRefReplacing
-
-lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaAnonAbstraction body) argRefPatchMin argRefReplacing = do
+lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaCompiledAbstraction body) argRefPatchMin argRefReplacing = do
   incedBody <- lambdaIncrementedArgRefsGreaterThanOrEqual body (argRefPatchMin + 1) argRefReplacing
-  return (LambdaAnonAbstraction incedBody)
+  return (LambdaCompiledAbstraction incedBody)
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaApplication terms) argRefPatchMin argRefReplacing = do
+lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaCompiledApplication func arg) argRefPatchMin argRefReplacing = do
   let incTerm term = lambdaIncrementedArgRefsGreaterThanOrEqual term argRefPatchMin argRefReplacing
-  incedTerms <- sequence (map incTerm terms)
-  return (LambdaApplication incedTerms)
-
--- bifs
-
-considerLambdasEqualForRedux :: LambdaAst -> LambdaAst -> Bool
-considerLambdasEqualForRedux = curry $ (boolFromTfn True) . (tfnCompareLambdas <$> fst <*> snd)
-
-tryReduceToList :: LambdaAst -> EitherStringOr LambdaAst
-tryReduceToList list@(LambdaList _) = do
-  return list
-
-tryReduceToList expr = do
-  exprReducedOnce <- lambdaBetaReducedOneStep expr
-  if not (considerLambdasEqualForRedux exprReducedOnce expr) then
-    tryReduceToList exprReducedOnce
-  else
-    (fail "failed to reduce expr to list")
-
-
-consBif :: LambdaAst -> EitherStringOr LambdaAst
-consBif headElem = return (LambdaBif doIt)
-  where
-    doIt expr = do
-      (LambdaList elems) <- tryReduceToList expr
-      return (LambdaList (headElem:elems))
-
-
-applyBif :: LambdaAst -> EitherStringOr LambdaAst
-applyBif expr = do
-  (LambdaList elems) <- tryReduceToList expr
-  return (LambdaApplication elems)
-
-
-fnBif :: LambdaAst ->  EitherStringOr LambdaAst
-fnBif params = return (LambdaBif (\body -> return $ LambdaAbstraction params body))
-
-
-letinBif :: LambdaAst -> EitherStringOr LambdaAst
-letinBif declsExpr = return (LambdaBif doIt)
-  where
-    doIt body = do
-      (LambdaList decls) <- tryReduceToList declsExpr
-      case decls of
-        [(LambdaList [a, b])] ->
-          return (LambdaApplication [(LambdaAbstraction a body), b])
-        ((LambdaList [a, b]):rest) ->
-          return
-            (LambdaApplication 
-              [
-                (LambdaAbstraction a 
-                  (LambdaApplication [(LambdaBif letinBif), (LambdaList rest), body]) 
-                ),
-                b
-              ]
-            )
-        [a, b] -> 
-          return (LambdaApplication [(LambdaAbstraction a body), b])
-        _ -> 
-          fail $ "letinBif blew up with decls = " ++ show decls
-  
+  incedFunc <- incTerm func
+  incedArg <- incTerm arg
+  return (LambdaCompiledApplication incedFunc incedArg)

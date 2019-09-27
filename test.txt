@@ -1,0 +1,120 @@
+(
+	(fn zero (fn one (fn two (fn three (fn four (fn succ (fn pred (fn add (fn mult (fn pow (fn sub
+		[
+			[
+				(succ zero)
+				one
+			]
+
+			[
+				(succ one)
+				two
+			]
+
+			[
+				(succ two)
+				three
+			]
+
+			[
+				(succ three)
+				four
+			]
+
+			[
+				(pred zero)
+				zero
+			]
+
+			[
+				(pred one)
+				zero
+			]
+
+			[
+				(pred two)
+				one
+			]
+
+			[
+				(pred three)
+				two
+			]
+
+			[
+				(add zero zero)
+				zero
+			]
+
+			[
+				(add zero one)
+				one
+			]
+
+			[
+				(add zero two)
+				two
+			]
+
+			[
+				(add zero three)
+				three
+			]
+
+			[
+				(add zero four)
+				four
+			]
+			
+			[
+				(add one one)
+				two
+			]
+
+			[
+				(add one two)
+				three
+			]
+
+			[
+				(add one three)
+				four
+			]
+
+			[
+				(add one four)
+				(succ four)
+			]
+		]
+	)))))))))))
+	(fn f (fn x x))
+	(fn f (fn x (f x)))
+	(fn f (fn x (f (f x))))
+	(fn f (fn x (f (f (f x)))))
+	(fn f (fn x (f (f (f (f x))))))
+
+	(fn n (fn f (fn x (f (n f x)))))
+
+	(fn n 
+		(fn f 
+			(fn x 
+				(
+					n 
+					(fn g 
+						(fn h 
+							(h (g f))
+						)
+					)
+					(fn u x) 
+					(fn u u)
+				)
+			)
+		)
+	)
+
+	(fn m (fn n (fn f (fn x (m f (n f x))))))
+
+	(fn x x)
+	(fn x x)
+	(fn x x)
+)
