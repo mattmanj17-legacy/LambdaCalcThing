@@ -4,46 +4,100 @@
 module ReduceLambda where
 
 import LambdaAst
+import EitherStringOr
 import Data.Maybe
 
 import Prelude hiding (fail)
 import Control.Monad.Fail
 
+import Text.Parsec.Pos
+
+errorStrAt :: SourcePos -> SourcePos -> String
+errorStrAt startPos endPos = 
+  concat
+    [ "<"
+    , (show (sourceLine startPos))
+    , ":"
+    , (show (sourceColumn startPos))
+    , "-"
+    , (show (sourceLine endPos))
+    , ":"
+    , (show (sourceColumn endPos))
+    , ">"
+    ]
+
 -- ANON
 
-anonLambda :: LambdaParsed -> EitherStringOr LambdaCompiled
+anonLambda :: RichParsedLambda -> EitherStringOr LambdaCompiled
 anonLambda = replaceVars []
 
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
-replaceVars :: [(String, Int)] -> LambdaParsed -> EitherStringOr LambdaCompiled
-replaceVars reps repIn =
+replaceVars :: [(String, Int)] -> RichParsedLambda -> EitherStringOr LambdaCompiled
+replaceVars reps (RichParsedLambda startPos repIn endPos) =
   case repIn of
-    (LambdaParsedId str) -> replaceVarsInId reps str
+    (LambdaParsedId str) -> replaceVarsInId reps (startPos, str, endPos)
     (LambdaParsedList elems) -> replaceVarsInList reps elems
     (LambdaParsedApplication terms) -> replaceVarsInApp reps terms
 
-replaceVarsInId :: [(String, Int)] -> String -> EitherStringOr LambdaCompiled
-replaceVarsInId reps str =
-  maybe (fail $ "could not find " ++ str) (return . LambdaCompiledArgRef) (lookup str reps)
+replaceVarsInId :: [(String, Int)] -> (SourcePos, String, SourcePos) -> EitherStringOr LambdaCompiled
+replaceVarsInId reps (startStr, str, endStr) =
+  maybe (fail $ (errorStrAt startStr endStr) ++ " err1 could not find " ++ str) (return . LambdaCompiledArgRef) (lookup str reps)
 
-replaceVarsInList :: [(String, Int)] -> [LambdaParsed] -> EitherStringOr LambdaCompiled
+replaceVarsInList :: [(String, Int)] -> [RichParsedLambda] -> EitherStringOr LambdaCompiled
 replaceVarsInList reps elems = do
   newElems <- sequence $ map (replaceVars reps) elems
   return $ LambdaCompiledList newElems
 
-replaceVarsInApp :: [(String, Int)] -> [LambdaParsed] -> EitherStringOr LambdaCompiled
-replaceVarsInApp reps [(LambdaParsedId "fn"), (LambdaParsedId arg), body] =
-  replaceVarsInAbsIdParam reps arg body
+replaceVarsInApp :: [(String, Int)] -> [RichParsedLambda] -> EitherStringOr LambdaCompiled
+replaceVarsInApp 
+  reps 
+  [ (RichParsedLambda _ (LambdaParsedId "fn") _)
+  , (RichParsedLambda startPosArg (LambdaParsedId arg) endPosArg)
+  , body
+  ] =
+  replaceVarsInAbsIdParam reps (startPosArg, arg, endPosArg) body
+replaceVarsInApp 
+  reps 
+  [ (RichParsedLambda fnStart (LambdaParsedId "fn") fnEnd)
+  , (RichParsedLambda _ (LambdaParsedList elems) endElems)
+  , body
+  ] =
+  case elems of
+    ((RichParsedLambda startPosArg (LambdaParsedId arg) endPosArg):rest) ->
+      replaceVarsInAbsIdParam reps (startPosArg, arg, endPosArg) $
+        case rest of
+          [] -> 
+            body
+          _ ->
+            (RichParsedLambda
+              fnStart
+              (LambdaParsedApplication
+                [(RichParsedLambda fnStart (LambdaParsedId "fn") fnEnd)
+                , (RichParsedLambda endPosArg (LambdaParsedList rest) endElems)
+                , body
+                ]
+              )
+              endElems
+            )
+    ((RichParsedLambda startPos _ endPos):_) -> 
+      fail $ (errorStrAt startPos endPos) ++ " err4 non id in params list for fn"
+    [] ->
+      fail $ (errorStrAt fnStart endElems) ++ " err5 empty params list for fn"
+
+replaceVarsInApp
+  _
+  ((RichParsedLambda startFn (LambdaParsedId "fn") endFn):_) =
+  fail $ (errorStrAt startFn endFn) ++ " err3 ill formed fn call"
 replaceVarsInApp reps terms = do
   newTerms <- sequence $ map (replaceVars reps) terms
   return $ nestApps newTerms
 
-replaceVarsInAbsIdParam :: [(String, Int)] -> String -> LambdaParsed -> EitherStringOr LambdaCompiled
-replaceVarsInAbsIdParam reps str body = do
+replaceVarsInAbsIdParam :: [(String, Int)] -> (SourcePos, String, SourcePos) -> RichParsedLambda -> EitherStringOr LambdaCompiled
+replaceVarsInAbsIdParam reps (startStr, str, endStr) body = do
   if isJust $ lookup str reps then
-    fail "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
+    fail $ (errorStrAt startStr endStr) ++ " err2 replaceVarsInAbsIdParam blew up because we were going to shadow a param"
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body

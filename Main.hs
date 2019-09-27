@@ -3,6 +3,7 @@
 import Test.Hspec
 
 import LambdaAst
+import EitherStringOr
 import ParseLambda
 --import UnAnonLambda
 import ReduceLambda

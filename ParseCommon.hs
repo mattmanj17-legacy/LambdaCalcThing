@@ -17,12 +17,10 @@ parseWhiteSpace a = do
   _ <- many (oneOf ['\x20','\x0D','\x0A','\x09'])
   return a
 
-wrapWs :: SimpleParser a -> SimpleParser a
-wrapWs parser = do
-  parseWhiteSpace ()
-  res <- parser
-  parseWhiteSpace ()
-  return res
+parseWhiteSpace1 :: a -> SimpleParser a
+parseWhiteSpace1 a = do
+  _ <- many1 (oneOf ['\x20','\x0D','\x0A','\x09'])
+  return a
 
 parseFromStr :: Stream s Identity t => Parsec s () a -> s -> Either ParseError a
 parseFromStr parseFn = parse parseFn "unknown"

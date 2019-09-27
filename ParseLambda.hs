@@ -12,32 +12,60 @@ import ParseCommon
 
 import LambdaAst
 
-parseLambda :: SimpleParser LambdaParsed
+parseIgnore :: SimpleParser ()
+parseIgnore = do
+  _ <- many $ parseWhiteSpace1 () <|> parseComment
+  return ()
+
+parseComment :: SimpleParser ()
+parseComment = do
+  _ <- char '-'
+  _ <- char '-'
+  _ <- many (noneOf "\n")
+  return ()
+
+parseLambda :: SimpleParser RichParsedLambda
 parseLambda =
   parseId <|>
   parseList <|>
   parseParens
 
-parseId :: SimpleParser LambdaParsed
+parseId :: SimpleParser RichParsedLambda
 parseId = do
-  str <- wrapWs $ many1 letter
-  return (LambdaParsedId str)
+  _ <- parseIgnore
+  posStart <- getPosition
+  str <- many1 letter
+  posEnd <- getPosition
+  _ <- parseIgnore
+  return (RichParsedLambda posStart (LambdaParsedId str) posEnd)
 
-parseList :: SimpleParser LambdaParsed 
+parseList :: SimpleParser RichParsedLambda 
 parseList = do
-  _ <- wrapWs $ char '['
-  elems <- sepBy (wrapWs parseLambda) (parseWhiteSpace ())
-  _ <- wrapWs $ char ']'
-  return (LambdaParsedList elems)
+  _ <- parseIgnore
+  posStart <- getPosition
+  _ <- char '['
+  _ <- parseIgnore
+  elems <- sepBy parseLambda parseIgnore
+  _ <- parseIgnore
+  _ <- char ']'
+  posEnd <- getPosition
+  _ <- parseIgnore
+  return (RichParsedLambda posStart (LambdaParsedList elems) posEnd)
 
-parseParens :: SimpleParser LambdaParsed
+parseParens :: SimpleParser RichParsedLambda
 parseParens = do
-  _ <- wrapWs $ char '('
+  _ <- parseIgnore
+  posStart <- getPosition
+  _ <- char '('
+  _ <- parseIgnore
   result <- parseApplication
-  _ <- wrapWs $ char ')'
-  return result
+  _ <- parseIgnore
+  _ <- char ')'
+  posEnd <- getPosition
+  _ <- parseIgnore
+  return (RichParsedLambda posStart result posEnd)
 
 parseApplication :: SimpleParser LambdaParsed
 parseApplication = do
-  terms <- sepBy1 (wrapWs parseLambda) (parseWhiteSpace ())
+  terms <- sepBy1 parseLambda parseIgnore
   return (LambdaParsedApplication terms)
