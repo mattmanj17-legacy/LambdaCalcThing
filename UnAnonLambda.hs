@@ -9,7 +9,7 @@ where
 import Data.Maybe
 
 import LambdaAst
-unAnonLambda :: LambdaCompiled -> EitherStringOr LambdaParsed
+unAnonLambda :: Expr -> Fallible Ast
 unAnonLambda = replaceArgRefsWithVars []
 
 
@@ -21,26 +21,26 @@ varNameFromN :: Int -> String
 varNameFromN n = [toEnum (n + (fromEnum 'a'))]
 
 
-replaceArgRefsWithVars :: [(Int, String)] -> LambdaCompiled -> EitherStringOr LambdaParsed
-replaceArgRefsWithVars replacements (LambdaCompiledArgRef argRef) =
+replaceArgRefsWithVars :: [(Int, String)] -> Expr -> Fallible Ast
+replaceArgRefsWithVars replacements (ExprArgRef argRef) =
   if isJust replacement then
-    return (LambdaParsedId (fromJust replacement))
+    return (AstId (fromJust replacement))
   else
     fail $ "could not replace argref " ++ show argRef
   where
     replacement = lookup argRef replacements
 
-replaceArgRefsWithVars replacements (LambdaCompiledList elems) = do
+replaceArgRefsWithVars replacements (ExprList elems) = do
   replacedElems <- sequence (map (replaceArgRefsWithVars replacements) elems)
-  return (LambdaParsedList replacedElems)
+  return (AstList replacedElems)
 
-replaceArgRefsWithVars replacements (LambdaCompiledAbstraction body) = do
+replaceArgRefsWithVars replacements (ExprAbstraction body) = do
   let nextVarName = varNameFromN $ length replacements
   let nextReplacements = (1, nextVarName):(incReplacements replacements)
   newBody <- replaceArgRefsWithVars nextReplacements body
-  return (LambdaParsedApplication [LambdaParsedId "fn", LambdaParsedId nextVarName, newBody])
+  return (AstApplication [AstId "fn", AstId nextVarName, newBody])
 
-replaceArgRefsWithVars replacements (LambdaCompiledApplication func arg) = do
+replaceArgRefsWithVars replacements (ExprApplication func arg) = do
   replacedFunc <- replaceArgRefsWithVars replacements func
   replacedArg <- replaceArgRefsWithVars replacements arg
-  return (LambdaParsedApplication [replacedFunc, replacedArg])
+  return (AstApplication [replacedFunc, replacedArg])

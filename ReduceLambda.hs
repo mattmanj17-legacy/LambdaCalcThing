@@ -4,114 +4,111 @@
 module ReduceLambda where
 
 import LambdaAst
-import EitherStringOr
+import MetaData
+import Fallible
 import Data.Maybe
-
-import Prelude hiding (fail)
-import Control.Monad.Fail
 
 import Text.Parsec.Pos
 
-errorStrAt :: SourcePos -> SourcePos -> String
-errorStrAt startPos endPos = 
+errorStrAt :: AstMetaData -> String
+errorStrAt (AstMetaData start end) = 
   concat
     [ "<"
-    , (show (sourceLine startPos))
+    , (show (sourceLine start))
     , ":"
-    , (show (sourceColumn startPos))
+    , (show (sourceColumn start))
     , "-"
-    , (show (sourceLine endPos))
+    , (show (sourceLine end))
     , ":"
-    , (show (sourceColumn endPos))
+    , (show (sourceColumn end))
     , ">"
     ]
 
 -- ANON
 
-anonLambda :: RichParsedLambda -> EitherStringOr LambdaCompiled
+anonLambda :: MetaData AstMetaData Ast -> Fallible Expr
 anonLambda = replaceVars []
 
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
-replaceVars :: [(String, Int)] -> RichParsedLambda -> EitherStringOr LambdaCompiled
-replaceVars reps (RichParsedLambda startPos repIn endPos) =
+replaceVars :: [(String, Int)] -> MetaData AstMetaData Ast -> Fallible Expr
+replaceVars reps (MetaData md repIn) =
   case repIn of
-    (LambdaParsedId str) -> replaceVarsInId reps (startPos, str, endPos)
-    (LambdaParsedList elems) -> replaceVarsInList reps elems
-    (LambdaParsedApplication terms) -> replaceVarsInApp reps terms
+    (AstId str) -> replaceVarsInId reps md str
+    (AstList elems) -> replaceVarsInList reps elems
+    (AstApplication terms) -> replaceVarsInApp reps terms
 
-replaceVarsInId :: [(String, Int)] -> (SourcePos, String, SourcePos) -> EitherStringOr LambdaCompiled
-replaceVarsInId reps (startStr, str, endStr) =
-  maybe (fail $ (errorStrAt startStr endStr) ++ " err1 could not find " ++ str) (return . LambdaCompiledArgRef) (lookup str reps)
+replaceVarsInId :: [(String, Int)] -> AstMetaData -> String -> Fallible Expr
+replaceVarsInId reps md str =
+  maybe (fail $ (errorStrAt md) ++ " err1 could not find " ++ str) (return . ExprArgRef) (lookup str reps)
 
-replaceVarsInList :: [(String, Int)] -> [RichParsedLambda] -> EitherStringOr LambdaCompiled
+replaceVarsInList :: [(String, Int)] -> [MetaData AstMetaData Ast] -> Fallible Expr
 replaceVarsInList reps elems = do
   newElems <- sequence $ map (replaceVars reps) elems
-  return $ LambdaCompiledList newElems
+  return $ ExprList newElems
 
-replaceVarsInApp :: [(String, Int)] -> [RichParsedLambda] -> EitherStringOr LambdaCompiled
+replaceVarsInApp :: [(String, Int)] -> [MetaData AstMetaData Ast] -> Fallible Expr
 replaceVarsInApp 
   reps 
-  [ (RichParsedLambda _ (LambdaParsedId "fn") _)
-  , (RichParsedLambda startPosArg (LambdaParsedId arg) endPosArg)
+  [ (MetaData _ (AstId "fn"))
+  , (MetaData md (AstId arg))
   , body
   ] =
-  replaceVarsInAbsIdParam reps (startPosArg, arg, endPosArg) body
+  replaceVarsInAbsIdParam reps md arg body
 replaceVarsInApp 
   reps 
-  [ (RichParsedLambda fnStart (LambdaParsedId "fn") fnEnd)
-  , (RichParsedLambda _ (LambdaParsedList elems) endElems)
+  [ (MetaData fnMd (AstId "fn"))
+  , (MetaData elemsMd (AstList elems))
   , body
   ] =
   case elems of
-    ((RichParsedLambda startPosArg (LambdaParsedId arg) endPosArg):rest) ->
-      replaceVarsInAbsIdParam reps (startPosArg, arg, endPosArg) $
+    ((MetaData mdArg (AstId arg)):rest) ->
+      replaceVarsInAbsIdParam reps mdArg arg $
         case rest of
           [] -> 
             body
           _ ->
-            (RichParsedLambda
-              fnStart
-              (LambdaParsedApplication
-                [(RichParsedLambda fnStart (LambdaParsedId "fn") fnEnd)
-                , (RichParsedLambda endPosArg (LambdaParsedList rest) endElems)
+            (MetaData
+              (AstMetaData (startPos fnMd) (endPos elemsMd))
+              (AstApplication
+                [(MetaData fnMd (AstId "fn"))
+                , (MetaData (AstMetaData (endPos mdArg) (endPos elemsMd)) (AstList rest))
                 , body
                 ]
               )
-              endElems
             )
-    ((RichParsedLambda startPos _ endPos):_) -> 
-      fail $ (errorStrAt startPos endPos) ++ " err4 non id in params list for fn"
+    ((MetaData md _):_) -> 
+      fail $ (errorStrAt md) ++ " err4 non id in params list for fn"
     [] ->
-      fail $ (errorStrAt fnStart endElems) ++ " err5 empty params list for fn"
+      fail $ (errorStrAt elemsMd) ++ " err5 empty params list for fn"
 
 replaceVarsInApp
   _
-  ((RichParsedLambda startFn (LambdaParsedId "fn") endFn):_) =
-  fail $ (errorStrAt startFn endFn) ++ " err3 ill formed fn call"
+  ((MetaData fnMd (AstId "fn")):_) =
+    fail $ (errorStrAt fnMd) ++ " err3 ill formed fn call"
 replaceVarsInApp reps terms = do
   newTerms <- sequence $ map (replaceVars reps) terms
   return $ nestApps newTerms
 
-replaceVarsInAbsIdParam :: [(String, Int)] -> (SourcePos, String, SourcePos) -> RichParsedLambda -> EitherStringOr LambdaCompiled
-replaceVarsInAbsIdParam reps (startStr, str, endStr) body = do
+replaceVarsInAbsIdParam :: [(String, Int)] -> AstMetaData -> String -> MetaData AstMetaData Ast -> Fallible Expr
+replaceVarsInAbsIdParam reps strMd str body = do
   if isJust $ lookup str reps then
-    fail $ (errorStrAt startStr endStr) ++ " err2 replaceVarsInAbsIdParam blew up because we were going to shadow a param"
+    fail $ (errorStrAt strMd) ++ " err2 replaceVarsInAbsIdParam blew up because we were going to shadow a param"
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body
-    return (LambdaCompiledAbstraction newBody)
+    return (ExprAbstraction newBody)
 
-nestApps :: [LambdaCompiled] -> LambdaCompiled
+nestApps :: [Expr] -> Expr
 nestApps [] = undefined
 nestApps [_] = undefined
-nestApps [a, b] = LambdaCompiledApplication a b
+nestApps [a, b] = ExprApplication a b
 nestApps (a:b:rest) = nestApps ((nestApps [a, b]):rest)
 
 -- REDUX
 
-lambdasBetaReducedOneStep :: [LambdaCompiled] -> EitherStringOr [LambdaCompiled]
+lambdasBetaReducedOneStep :: [Expr] -> Fallible [Expr]
 lambdasBetaReducedOneStep [] =
   return []
 
@@ -127,27 +124,27 @@ lambdasBetaReducedOneStep (term:rest) = do
   else do
     return (termReducedOnce:rest)
 
-lambdaBetaReducedOneStep :: LambdaCompiled -> EitherStringOr LambdaCompiled
-lambdaBetaReducedOneStep argRef@(LambdaCompiledArgRef _) =
+lambdaBetaReducedOneStep :: Expr -> Fallible Expr
+lambdaBetaReducedOneStep argRef@(ExprArgRef _) =
   return argRef
 
-lambdaBetaReducedOneStep (LambdaCompiledList elems) = do
+lambdaBetaReducedOneStep (ExprList elems) = do
   elemsReducedOnce <- lambdasBetaReducedOneStep elems
-  return (LambdaCompiledList elemsReducedOnce)
+  return (ExprList elemsReducedOnce)
 
-lambdaBetaReducedOneStep (LambdaCompiledAbstraction val) = do
+lambdaBetaReducedOneStep (ExprAbstraction val) = do
   reducedValOnce <- lambdaBetaReducedOneStep val
-  return (LambdaCompiledAbstraction reducedValOnce)
+  return (ExprAbstraction reducedValOnce)
 
-lambdaBetaReducedOneStep (LambdaCompiledApplication (LambdaCompiledAbstraction func) arg) =
+lambdaBetaReducedOneStep (ExprApplication (ExprAbstraction func) arg) =
   lambdaAppliedTo arg func
 
-lambdaBetaReducedOneStep (LambdaCompiledApplication func arg) = do
+lambdaBetaReducedOneStep (ExprApplication func arg) = do
   [newFunc, newArg] <- lambdasBetaReducedOneStep [func, arg]
-  return (LambdaCompiledApplication newFunc newArg)
+  return (ExprApplication newFunc newArg)
 
 
-lambdaBetaReducedFull :: LambdaCompiled -> EitherStringOr LambdaCompiled
+lambdaBetaReducedFull :: Expr -> Fallible Expr
 lambdaBetaReducedFull term = do
   reducedOnce <- lambdaBetaReducedOneStep term
   if term == reducedOnce then do
@@ -155,51 +152,51 @@ lambdaBetaReducedFull term = do
   else do
     lambdaBetaReducedFull reducedOnce
 
-lambdaAppliedTo :: LambdaCompiled -> LambdaCompiled -> EitherStringOr LambdaCompiled
+lambdaAppliedTo :: Expr -> Expr -> Fallible Expr
 lambdaAppliedTo = 
   lambdaArgRefReplacedWithLambda 1
 
 
-lambdaArgRefReplacedWithLambda :: Int -> LambdaCompiled -> LambdaCompiled -> EitherStringOr LambdaCompiled
-lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaCompiledArgRef argRef) = do
+lambdaArgRefReplacedWithLambda :: Int -> Expr -> Expr -> Fallible Expr
+lambdaArgRefReplacedWithLambda argRefReplace arg (ExprArgRef argRef) = do
   if argRefReplace == argRef then do
     inced <- lambdaIncrementedArgRefsGreaterThanOrEqual arg 1 argRef
     return inced
   else if argRefReplace < argRef then
-    return (LambdaCompiledArgRef (argRef-1))
+    return (ExprArgRef (argRef-1))
   else
-    return (LambdaCompiledArgRef argRef)
+    return (ExprArgRef argRef)
 
-lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaCompiledList elems) = do
+lambdaArgRefReplacedWithLambda argRefReplace arg (ExprList elems) = do
   elemsReplaced <- sequence (map (lambdaArgRefReplacedWithLambda argRefReplace arg) elems)
-  return (LambdaCompiledList elemsReplaced)
+  return (ExprList elemsReplaced)
 
-lambdaArgRefReplacedWithLambda argRefReplace arg (LambdaCompiledAbstraction body) = do
+lambdaArgRefReplacedWithLambda argRefReplace arg (ExprAbstraction body) = do
   newBody <- lambdaArgRefReplacedWithLambda (argRefReplace+1) arg body
-  return (LambdaCompiledAbstraction newBody)
+  return (ExprAbstraction newBody)
 
-lambdaArgRefReplacedWithLambda argRefReplace argReplace (LambdaCompiledApplication func arg) = do
+lambdaArgRefReplacedWithLambda argRefReplace argReplace (ExprApplication func arg) = do
   funcReplaced <- lambdaArgRefReplacedWithLambda argRefReplace argReplace func
   argReplaced <- lambdaArgRefReplacedWithLambda argRefReplace argReplace arg
-  return (LambdaCompiledApplication funcReplaced argReplaced)
+  return (ExprApplication funcReplaced argReplaced)
   
 
-lambdaIncrementedArgRefsGreaterThanOrEqual :: LambdaCompiled -> Int -> Int -> EitherStringOr LambdaCompiled
-lambdaIncrementedArgRefsGreaterThanOrEqual lar@(LambdaCompiledArgRef argRef) argRefPatchMin argRefReplacing
+lambdaIncrementedArgRefsGreaterThanOrEqual :: Expr -> Int -> Int -> Fallible Expr
+lambdaIncrementedArgRefsGreaterThanOrEqual lar@(ExprArgRef argRef) argRefPatchMin argRefReplacing
   | argRef < argRefPatchMin = return lar
-  | otherwise = return (LambdaCompiledArgRef (argRef + argRefReplacing - 1))
+  | otherwise = return (ExprArgRef (argRef + argRefReplacing - 1))
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaCompiledList elems) argRefPatchMin argRefReplacing = do
+lambdaIncrementedArgRefsGreaterThanOrEqual (ExprList elems) argRefPatchMin argRefReplacing = do
   let incElems lElem = lambdaIncrementedArgRefsGreaterThanOrEqual lElem argRefPatchMin argRefReplacing
   incedElems <- sequence (map incElems elems)
-  return (LambdaCompiledList incedElems)
+  return (ExprList incedElems)
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaCompiledAbstraction body) argRefPatchMin argRefReplacing = do
+lambdaIncrementedArgRefsGreaterThanOrEqual (ExprAbstraction body) argRefPatchMin argRefReplacing = do
   incedBody <- lambdaIncrementedArgRefsGreaterThanOrEqual body (argRefPatchMin + 1) argRefReplacing
-  return (LambdaCompiledAbstraction incedBody)
+  return (ExprAbstraction incedBody)
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (LambdaCompiledApplication func arg) argRefPatchMin argRefReplacing = do
+lambdaIncrementedArgRefsGreaterThanOrEqual (ExprApplication func arg) argRefPatchMin argRefReplacing = do
   let incTerm term = lambdaIncrementedArgRefsGreaterThanOrEqual term argRefPatchMin argRefReplacing
   incedFunc <- incTerm func
   incedArg <- incTerm arg
-  return (LambdaCompiledApplication incedFunc incedArg)
+  return (ExprApplication incedFunc incedArg)

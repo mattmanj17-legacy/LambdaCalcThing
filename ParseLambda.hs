@@ -11,6 +11,7 @@ import Text.ParserCombinators.Parsec
 import ParseCommon
 
 import LambdaAst
+import MetaData
 
 parseIgnore :: SimpleParser ()
 parseIgnore = do
@@ -24,22 +25,22 @@ parseComment = do
   _ <- many (noneOf "\n")
   return ()
 
-parseLambda :: SimpleParser RichParsedLambda
+parseLambda :: SimpleParser (MetaData AstMetaData Ast)
 parseLambda =
   parseId <|>
   parseList <|>
   parseParens
 
-parseId :: SimpleParser RichParsedLambda
+parseId :: SimpleParser (MetaData AstMetaData Ast)
 parseId = do
   _ <- parseIgnore
   posStart <- getPosition
   str <- many1 letter
   posEnd <- getPosition
   _ <- parseIgnore
-  return (RichParsedLambda posStart (LambdaParsedId str) posEnd)
+  return (MetaData (AstMetaData posStart posEnd) (AstId str))
 
-parseList :: SimpleParser RichParsedLambda 
+parseList :: SimpleParser (MetaData AstMetaData Ast) 
 parseList = do
   _ <- parseIgnore
   posStart <- getPosition
@@ -50,9 +51,9 @@ parseList = do
   _ <- char ']'
   posEnd <- getPosition
   _ <- parseIgnore
-  return (RichParsedLambda posStart (LambdaParsedList elems) posEnd)
+  return (MetaData (AstMetaData posStart posEnd) (AstList elems))
 
-parseParens :: SimpleParser RichParsedLambda
+parseParens :: SimpleParser (MetaData AstMetaData Ast)
 parseParens = do
   _ <- parseIgnore
   posStart <- getPosition
@@ -63,9 +64,9 @@ parseParens = do
   _ <- char ')'
   posEnd <- getPosition
   _ <- parseIgnore
-  return (RichParsedLambda posStart result posEnd)
+  return (MetaData (AstMetaData posStart posEnd) result)
 
-parseApplication :: SimpleParser LambdaParsed
+parseApplication :: SimpleParser Ast
 parseApplication = do
   terms <- sepBy1 parseLambda parseIgnore
-  return (LambdaParsedApplication terms)
+  return (AstApplication terms)

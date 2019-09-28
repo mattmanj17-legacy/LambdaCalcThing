@@ -3,7 +3,7 @@
 import Test.Hspec
 
 import LambdaAst
-import EitherStringOr
+import Fallible
 import ParseLambda
 --import UnAnonLambda
 import ReduceLambda
@@ -24,18 +24,18 @@ doIt str =
         parsed `shouldSatisfy` isRight
       if isRight parsed then do
         let justParsed = fromRight undefined parsed
-        let compiled = anonLambda justParsed
+        let compiled = runFallible $ anonLambda justParsed
         it "should compile" $ do
-          compiled `shouldSatisfy` isEsRight
-        if isEsRight compiled then do
-          let justCompiled = fromEsRightUnsafe compiled
-          let reduced = lambdaBetaReducedFull justCompiled
+          compiled `shouldSatisfy` isRight
+        if isRight compiled then do
+          let justCompiled = fromRight undefined compiled
+          let reduced = runFallible $ lambdaBetaReducedFull justCompiled
           it "should reduce" $ do
-            reduced `shouldSatisfy` isEsRight
-          if isEsRight reduced then do
-            let justReduced = fromEsRightUnsafe reduced
+            reduced `shouldSatisfy` isRight
+          if isRight reduced then do
+            let justReduced = fromRight undefined reduced
             case justReduced of
-              (LambdaCompiledList tests) -> do
+              (ExprList tests) -> do
                 _ <- sequence $ map singleTest tests
                 it "honk" $ do
                   True `shouldBe` True
@@ -52,8 +52,8 @@ doIt str =
         it "honk" $ do
           True `shouldBe` True
 
-singleTest :: LambdaCompiled -> SpecWith ()
-singleTest (LambdaCompiledList [a, b]) = do
+singleTest :: Expr -> SpecWith ()
+singleTest (ExprList [a, b]) = do
   it "should equal" $ do
     a `shouldBe` b
 singleTest _ =
