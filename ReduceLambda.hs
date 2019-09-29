@@ -43,7 +43,7 @@ replaceVars reps (MetaData md repIn) =
 
 replaceVarsInId :: [(String, Int)] -> AstMetaData -> String -> FallibleT Identity Expr
 replaceVarsInId reps md str =
-  maybe (fail $ (errorStrAt md) ++ " err1 could not find " ++ str) (return . ExprArgRef) (lookup str reps)
+  maybe (throwE $ (errorStrAt md) ++ " err1 could not find " ++ str) (return . ExprArgRef) (lookup str reps)
 
 replaceVarsInList :: [(String, Int)] -> [MetaData AstMetaData Ast] -> FallibleT Identity Expr
 replaceVarsInList reps elems = do
@@ -81,14 +81,14 @@ replaceVarsInApp
               )
             )
     ((MetaData md _):_) -> 
-      fail $ (errorStrAt md) ++ " err4 non id in params list for fn"
+      throwE $ (errorStrAt md) ++ " err4 non id in params list for fn"
     [] ->
-      fail $ (errorStrAt elemsMd) ++ " err5 empty params list for fn"
+      throwE $ (errorStrAt elemsMd) ++ " err5 empty params list for fn"
 
 replaceVarsInApp
   _
   ((MetaData fnMd (AstId "fn")):_) =
-    fail $ (errorStrAt fnMd) ++ " err3 ill formed fn call"
+    throwE $ (errorStrAt fnMd) ++ " err3 ill formed fn call"
 replaceVarsInApp reps terms = do
   newTerms <- sequence $ map (replaceVars reps) terms
   return $ nestApps newTerms
@@ -96,7 +96,7 @@ replaceVarsInApp reps terms = do
 replaceVarsInAbsIdParam :: [(String, Int)] -> AstMetaData -> String -> MetaData AstMetaData Ast -> FallibleT Identity Expr
 replaceVarsInAbsIdParam reps strMd str body = do
   if isJust $ lookup str reps then
-    fail $ (errorStrAt strMd) ++ " err2 replaceVarsInAbsIdParam blew up because we were going to shadow a param"
+    throwE $ (errorStrAt strMd) ++ " err2 replaceVarsInAbsIdParam blew up because we were going to shadow a param"
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body

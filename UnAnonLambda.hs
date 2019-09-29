@@ -26,7 +26,7 @@ replaceArgRefsWithVars replacements (ExprArgRef argRef) =
   if isJust replacement then
     return (AstId (fromJust replacement))
   else
-    fail $ "could not replace argref " ++ show argRef
+    throwE $ "could not replace argref " ++ show argRef
   where
     replacement = lookup argRef replacements
 
