@@ -1,23 +1,32 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Fallible where
 
 import Control.Monad.Fail
+import Control.Applicative
 
-newtype Fallible a = Fallible 
-  { runFallible :: Either String a
+data FallibleT m a = FallibleT 
+  { runFallible :: m (Either String a)
   }
 
-instance Functor Fallible where
-  fmap fn (Fallible a) = Fallible $ fmap fn a
+instance (Show (m (Either String a))) => Show (FallibleT m a) where
+  show = show . runFallible
 
-instance Applicative Fallible where
-  pure a = Fallible $ pure a
-  (Fallible a) <*> (Fallible b) = (Fallible (a <*> b))
+instance Functor m => Functor (FallibleT m) where
+  fmap f = FallibleT . fmap (fmap f) . runFallible
 
-instance Monad Fallible where
-  (>>=) (Fallible a) fn = Fallible $ (>>=) a (runFallible . fn)
-  (>>) (Fallible a) (Fallible b) = Fallible $ (>>) a b
+instance Applicative m => Applicative (FallibleT m) where
+  pure = FallibleT . pure . Right
+  f <*> x = FallibleT $ liftA2 (<*>) (runFallible f) (runFallible x)
 
-instance MonadFail Fallible where
-  fail str = Fallible (Left str)
+instance Monad m => Monad (FallibleT m) where
+  x >>= f = 
+    FallibleT $ 
+      runFallible x >>= 
+        either 
+          (return . Left) 
+          (runFallible . f)
+
+instance Monad m => MonadFail (FallibleT m) where
+  fail = FallibleT . return . Left 

@@ -10,6 +10,8 @@ import Data.Maybe
 
 import Text.Parsec.Pos
 
+import Data.Functor.Identity
+
 errorStrAt :: AstMetaData -> String
 errorStrAt (AstMetaData start end) = 
   concat
@@ -26,29 +28,29 @@ errorStrAt (AstMetaData start end) =
 
 -- ANON
 
-anonLambda :: MetaData AstMetaData Ast -> Fallible Expr
+anonLambda :: MetaData AstMetaData Ast -> FallibleT Identity Expr
 anonLambda = replaceVars []
 
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
-replaceVars :: [(String, Int)] -> MetaData AstMetaData Ast -> Fallible Expr
+replaceVars :: [(String, Int)] -> MetaData AstMetaData Ast -> FallibleT Identity Expr
 replaceVars reps (MetaData md repIn) =
   case repIn of
     (AstId str) -> replaceVarsInId reps md str
     (AstList elems) -> replaceVarsInList reps elems
     (AstApplication terms) -> replaceVarsInApp reps terms
 
-replaceVarsInId :: [(String, Int)] -> AstMetaData -> String -> Fallible Expr
+replaceVarsInId :: [(String, Int)] -> AstMetaData -> String -> FallibleT Identity Expr
 replaceVarsInId reps md str =
   maybe (fail $ (errorStrAt md) ++ " err1 could not find " ++ str) (return . ExprArgRef) (lookup str reps)
 
-replaceVarsInList :: [(String, Int)] -> [MetaData AstMetaData Ast] -> Fallible Expr
+replaceVarsInList :: [(String, Int)] -> [MetaData AstMetaData Ast] -> FallibleT Identity Expr
 replaceVarsInList reps elems = do
   newElems <- sequence $ map (replaceVars reps) elems
   return $ ExprList newElems
 
-replaceVarsInApp :: [(String, Int)] -> [MetaData AstMetaData Ast] -> Fallible Expr
+replaceVarsInApp :: [(String, Int)] -> [MetaData AstMetaData Ast] -> FallibleT Identity Expr
 replaceVarsInApp 
   reps 
   [ (MetaData _ (AstId "fn"))
@@ -91,7 +93,7 @@ replaceVarsInApp reps terms = do
   newTerms <- sequence $ map (replaceVars reps) terms
   return $ nestApps newTerms
 
-replaceVarsInAbsIdParam :: [(String, Int)] -> AstMetaData -> String -> MetaData AstMetaData Ast -> Fallible Expr
+replaceVarsInAbsIdParam :: [(String, Int)] -> AstMetaData -> String -> MetaData AstMetaData Ast -> FallibleT Identity Expr
 replaceVarsInAbsIdParam reps strMd str body = do
   if isJust $ lookup str reps then
     fail $ (errorStrAt strMd) ++ " err2 replaceVarsInAbsIdParam blew up because we were going to shadow a param"
@@ -108,7 +110,7 @@ nestApps (a:b:rest) = nestApps ((nestApps [a, b]):rest)
 
 -- REDUX
 
-lambdasBetaReducedOneStep :: [Expr] -> Fallible [Expr]
+lambdasBetaReducedOneStep :: [Expr] -> FallibleT Identity [Expr]
 lambdasBetaReducedOneStep [] =
   return []
 
@@ -124,7 +126,7 @@ lambdasBetaReducedOneStep (term:rest) = do
   else do
     return (termReducedOnce:rest)
 
-lambdaBetaReducedOneStep :: Expr -> Fallible Expr
+lambdaBetaReducedOneStep :: Expr -> FallibleT Identity Expr
 lambdaBetaReducedOneStep argRef@(ExprArgRef _) =
   return argRef
 
@@ -144,7 +146,7 @@ lambdaBetaReducedOneStep (ExprApplication func arg) = do
   return (ExprApplication newFunc newArg)
 
 
-lambdaBetaReducedFull :: Expr -> Fallible Expr
+lambdaBetaReducedFull :: Expr -> FallibleT Identity Expr
 lambdaBetaReducedFull term = do
   reducedOnce <- lambdaBetaReducedOneStep term
   if term == reducedOnce then do
@@ -152,12 +154,12 @@ lambdaBetaReducedFull term = do
   else do
     lambdaBetaReducedFull reducedOnce
 
-lambdaAppliedTo :: Expr -> Expr -> Fallible Expr
+lambdaAppliedTo :: Expr -> Expr -> FallibleT Identity Expr
 lambdaAppliedTo = 
   lambdaArgRefReplacedWithLambda 1
 
 
-lambdaArgRefReplacedWithLambda :: Int -> Expr -> Expr -> Fallible Expr
+lambdaArgRefReplacedWithLambda :: Int -> Expr -> Expr -> FallibleT Identity Expr
 lambdaArgRefReplacedWithLambda argRefReplace arg (ExprArgRef argRef) = do
   if argRefReplace == argRef then do
     inced <- lambdaIncrementedArgRefsGreaterThanOrEqual arg 1 argRef
@@ -181,7 +183,7 @@ lambdaArgRefReplacedWithLambda argRefReplace argReplace (ExprApplication func ar
   return (ExprApplication funcReplaced argReplaced)
   
 
-lambdaIncrementedArgRefsGreaterThanOrEqual :: Expr -> Int -> Int -> Fallible Expr
+lambdaIncrementedArgRefsGreaterThanOrEqual :: Expr -> Int -> Int -> FallibleT Identity Expr
 lambdaIncrementedArgRefsGreaterThanOrEqual lar@(ExprArgRef argRef) argRefPatchMin argRefReplacing
   | argRef < argRefPatchMin = return lar
   | otherwise = return (ExprArgRef (argRef + argRefReplacing - 1))

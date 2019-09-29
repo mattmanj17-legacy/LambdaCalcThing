@@ -5,10 +5,12 @@ import Test.Hspec
 import LambdaAst
 import Fallible
 import ParseLambda
+import MetaData
 --import UnAnonLambda
 import ReduceLambda
-import Data.Either
 import ParseCommon
+import Data.Functor.Identity
+import Data.Either
 
 main :: IO ()
 main = do
@@ -18,18 +20,18 @@ main = do
 doIt :: String -> IO ()
 doIt str =
   hspec $ do
-    let parsed = parseFromStrToEither parseLambda str
+    let parsed = parseFallible parseLambda "test.txt" str :: FallibleT Identity (MetaData AstMetaData Ast)
     describe "lambda" $ do
       it "should parse" $ do
-        parsed `shouldSatisfy` isRight
-      if isRight parsed then do
-        let justParsed = fromRight undefined parsed
-        let compiled = runFallible $ anonLambda justParsed
+        parsed `shouldSatisfy` (isRight . runIdentity . runFallible)
+      if isRight (runIdentity (runFallible parsed)) then do
+        let justParsed = fromRight undefined (runIdentity (runFallible parsed))
+        let compiled = runIdentity $ runFallible $ anonLambda justParsed
         it "should compile" $ do
           compiled `shouldSatisfy` isRight
         if isRight compiled then do
           let justCompiled = fromRight undefined compiled
-          let reduced = runFallible $ lambdaBetaReducedFull justCompiled
+          let reduced = runIdentity $ runFallible $ lambdaBetaReducedFull justCompiled
           it "should reduce" $ do
             reduced `shouldSatisfy` isRight
           if isRight reduced then do
@@ -51,6 +53,9 @@ doIt str =
       else do
         it "honk" $ do
           True `shouldBe` True
+
+--genTests :: String -> FallibleT Identity [FallibleT Identity (Expr, Expr)]
+--genTests
 
 singleTest :: Expr -> SpecWith ()
 singleTest (ExprList [a, b]) = do
