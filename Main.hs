@@ -54,8 +54,18 @@ doIt str =
         it "honk" $ do
           True `shouldBe` True
 
---genTests :: String -> FallibleT Identity [FallibleT Identity (Expr, Expr)]
---genTests
+genTests :: String -> FallibleT Identity [FallibleT Identity (Expr, Expr)]
+genTests str = do
+  parsed <- parseFallible parseLambda "test.txt" str
+  compiled <- anonLambda parsed
+  reduced <- lambdaBetaReducedFull compiled
+  case reduced of
+    (ExprList elems) -> return $ (map verifyTest) elems
+    _ -> throwE "expr was not a pair!!!"
+
+verifyTest :: Expr -> FallibleT Identity (Expr, Expr)
+verifyTest (ExprList [a, b]) = return (a, b)
+verifyTest _ = throwE "expr was not a pair!!!"
 
 singleTest :: Expr -> SpecWith ()
 singleTest (ExprList [a, b]) = do

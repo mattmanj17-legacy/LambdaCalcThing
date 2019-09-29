@@ -142,8 +142,10 @@ lambdaBetaReducedOneStep (ExprApplication (ExprAbstraction func) arg) =
   lambdaAppliedTo arg func
 
 lambdaBetaReducedOneStep (ExprApplication func arg) = do
-  [newFunc, newArg] <- lambdasBetaReducedOneStep [func, arg]
-  return (ExprApplication newFunc newArg)
+  reduced <- lambdasBetaReducedOneStep [func, arg]
+  case reduced of
+    [newFunc, newArg] -> return (ExprApplication newFunc newArg)
+    _ -> throwE "huh??? lambdaBetaReducedOneStep blew up?"
 
 
 lambdaBetaReducedFull :: Expr -> FallibleT Identity Expr

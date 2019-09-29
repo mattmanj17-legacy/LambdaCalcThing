@@ -3,7 +3,6 @@
 
 module Fallible where
 
-import Control.Monad.Fail
 import Control.Applicative
 
 data FallibleT m a = FallibleT 
@@ -26,7 +25,7 @@ instance Monad m => Monad (FallibleT m) where
       runFallible x >>= 
         either 
           (return . Left) 
-          (runFallible . f)
+          (runFallible . f) 
 
-instance Monad m => MonadFail (FallibleT m) where
-  fail = FallibleT . return . Left 
+throwE :: Monad m => String -> FallibleT m a
+throwE = FallibleT . return . Left
