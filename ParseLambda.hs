@@ -40,6 +40,22 @@ parseId = do
   _ <- parseIgnore
   return (MetaData (AstMetaData posStart posEnd) (AstId str))
 
+listToPairs :: MetaData AstMetaData [MetaData AstMetaData Ast] -> MetaData AstMetaData Ast
+listToPairs (MetaData md []) = 
+  MetaData md AstEmptyList
+listToPairs (MetaData md (a:rest)) = 
+  (MetaData md 
+    (AstPair 
+      a 
+      (listToPairs 
+        (MetaData 
+          (AstMetaData (endPos (metaData a)) (endPos md))
+          rest
+        )
+      )
+    )
+  )
+
 parseList :: SimpleParser (MetaData AstMetaData Ast) 
 parseList = do
   _ <- parseIgnore
@@ -51,7 +67,7 @@ parseList = do
   _ <- char ']'
   posEnd <- getPosition
   _ <- parseIgnore
-  return (MetaData (AstMetaData posStart posEnd) (AstList elems))
+  return (listToPairs (MetaData (AstMetaData posStart posEnd) elems))
 
 parseParens :: SimpleParser (MetaData AstMetaData Ast)
 parseParens = do
@@ -64,9 +80,26 @@ parseParens = do
   _ <- char ')'
   posEnd <- getPosition
   _ <- parseIgnore
-  return (MetaData (AstMetaData posStart posEnd) result)
+  return (MetaData (AstMetaData posStart posEnd) (rawData result))
 
-parseApplication :: SimpleParser Ast
+listToApps :: MetaData AstMetaData [MetaData AstMetaData Ast] -> MetaData AstMetaData Ast
+listToApps (MetaData _ []) = undefined
+listToApps (MetaData _ [a]) = a
+listToApps (MetaData md (a:b:rest)) = 
+  listToApps 
+    (MetaData md 
+      ((:)
+        (MetaData
+          (AstMetaData (startPos (metaData a)) (endPos (metaData b)))
+          (AstApplication a b)
+        )
+        rest
+      )
+    )
+
+parseApplication :: SimpleParser (MetaData AstMetaData Ast)
 parseApplication = do
+  posStart <- getPosition
   terms <- sepBy1 parseLambda parseIgnore
-  return (AstApplication terms)
+  posEnd <- getPosition
+  return (listToApps (MetaData (AstMetaData posStart posEnd) terms))
