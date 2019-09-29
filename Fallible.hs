@@ -4,10 +4,17 @@
 module Fallible where
 
 import Control.Applicative
+import Data.Functor.Identity 
 
 data FallibleT m a = FallibleT 
   { runFallible :: m (Either String a)
   }
+
+fallibleLiftM :: Functor m => m a -> FallibleT m a
+fallibleLiftM x = FallibleT (fmap Right x)
+
+fallibleLiftId :: Monad m => FallibleT Identity a -> FallibleT m a
+fallibleLiftId x = FallibleT (return (runIdentity (runFallible x)))
 
 instance (Show (m (Either String a))) => Show (FallibleT m a) where
   show = show . runFallible

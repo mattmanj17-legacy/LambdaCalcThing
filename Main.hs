@@ -1,76 +1,36 @@
 {-# OPTIONS_GHC -Wall #-}
 
-import Test.Hspec
-
 import LambdaAst
 import Fallible
 import ParseLambda
-import MetaData
 --import UnAnonLambda
 import ReduceLambda
 import ParseCommon
 import Data.Functor.Identity
-import Data.Either
 
-main :: IO ()
-main = do
-  s <- readFile "test.txt"
-  doIt s
+testResults :: FallibleT IO [String]
+testResults = do
+  tests' <- tests
+  return $ map honkhonk tests'
 
-doIt :: String -> IO ()
-doIt str =
-  hspec $ do
-    let parsed = parseFallible parseLambda "test.txt" str :: FallibleT Identity (MetaData AstMetaData Ast)
-    describe "lambda" $ do
-      it "should parse" $ do
-        parsed `shouldSatisfy` (isRight . runIdentity . runFallible)
-      if isRight (runIdentity (runFallible parsed)) then do
-        let justParsed = fromRight undefined (runIdentity (runFallible parsed))
-        let compiled = runIdentity $ runFallible $ anonLambda justParsed
-        it "should compile" $ do
-          compiled `shouldSatisfy` isRight
-        if isRight compiled then do
-          let justCompiled = fromRight undefined compiled
-          let reduced = runIdentity $ runFallible $ lambdaBetaReducedFull justCompiled
-          it "should reduce" $ do
-            reduced `shouldSatisfy` isRight
-          if isRight reduced then do
-            let justReduced = fromRight undefined reduced
-            case justReduced of
-              (ExprList tests) -> do
-                _ <- sequence $ map singleTest tests
-                it "honk" $ do
-                  True `shouldBe` True
-              _ ->
-                it "was not a list1" $ do
-                  True `shouldBe` False
-          else do
-            it "honk" $ do
-              True `shouldBe` True
-        else do
-          it "honk" $ do
-            True `shouldBe` True
-      else do
-        it "honk" $ do
-          True `shouldBe` True
+honkhonk :: FallibleT Identity () -> String
+honkhonk x =
+  case runIdentity $ runFallible x of
+    (Left err) -> err
+    (Right ()) -> "test passed"
 
-genTests :: String -> FallibleT Identity [FallibleT Identity (Expr, Expr)]
-genTests str = do
+tests :: FallibleT IO [FallibleT Identity ()]
+tests = do
+  str <- fallibleLiftM $ readFile "test.txt"
   parsed <- parseFallible parseLambda "test.txt" str
-  compiled <- anonLambda parsed
-  reduced <- lambdaBetaReducedFull compiled
+  compiled <- fallibleLiftId $ anonLambda parsed
+  reduced <- fallibleLiftId $ lambdaBetaReducedFull compiled
   case reduced of
-    (ExprList elems) -> return $ (map verifyTest) elems
-    _ -> throwE "expr was not a pair!!!"
+    (ExprList elems) -> return $ (map runTest) elems
+    _ -> throwE "test.txt did not evaluate to a list!!!"
 
-verifyTest :: Expr -> FallibleT Identity (Expr, Expr)
-verifyTest (ExprList [a, b]) = return (a, b)
-verifyTest _ = throwE "expr was not a pair!!!"
-
-singleTest :: Expr -> SpecWith ()
-singleTest (ExprList [a, b]) = do
-  it "should equal" $ do
-    a `shouldBe` b
-singleTest _ =
-  it "was not a list1" $ do
-    True `shouldBe` False
+runTest :: Expr -> FallibleT Identity ()
+runTest (ExprList [a, b])
+  | a == b = return ()
+  | otherwise = throwE "were not equal!!!"
+runTest _ = throwE "expr was not a pair!!!"
