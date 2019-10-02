@@ -34,15 +34,15 @@ anonLambda = replaceVars []
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
+-- example of 'tell' --- fallibleLiftM $ tell ["replaceVars in " ++ show (rawData expr)]
+
 replaceVars :: [(String, Int)] -> Ast -> FallibleT (Writer [String]) Expr
 replaceVars reps expr = do
-  --fallibleLiftM $ tell ["replaceVars in " ++ show (rawData expr)]
   case expr of
     (AstId sp ep str) -> replaceVarsInId reps sp ep str
     (AstPair {frst, scnd}) -> replaceVarsInPair reps (frst, scnd)
-    (AstApplication _ _ fn arg) -> replaceVarsInApp reps (fn, arg)
-    AstEmptyList _ _ -> do
-      --fallibleLiftM $ tell ["left empty list alone"]
+    (AstApplication {fn, arg}) -> replaceVarsInApp reps (fn, arg)
+    AstEmptyList {} -> do
       return ExprEmptyList
 
 hoogoo :: Monoid w => a -> (a, w)
@@ -53,12 +53,10 @@ writerLiftM x = WriterT (fmap hoogoo x)
 
 replaceVarsInId :: [(String, Int)] -> SourcePos -> SourcePos -> String -> FallibleT (Writer [String]) Expr
 replaceVarsInId reps sp ep str = do
-  --fallibleLiftM $ tell ["replaceVarsInId " ++ str]
   maybe (throwE $ (errorStrAt sp ep) ++ " unrecognized id " ++ str) (return . ExprArgRef) (lookup str reps)
 
 replaceVarsInPair :: [(String, Int)] -> (Ast, Ast) -> FallibleT (Writer [String]) Expr
 replaceVarsInPair reps (frst, scnd) = do
-  --fallibleLiftM $ tell ["replaceVarsInPair"]
   newFrst <- replaceVars reps frst
   newScnd <- replaceVars reps scnd
   return $ ExprPair newFrst newScnd
@@ -68,8 +66,8 @@ replaceVarsInApp reps (replaceIn, replaceWith) = do
   case replaceIn of
     (AstApplication {fn = fn'@(AstId {idStr = "fn"}), arg}) ->
       case arg of
-        (AstId {idStr = param}) ->
-          replaceVarsInAbsIdParam reps (startPos arg) (endPos arg) param replaceWith
+        (AstId { idStr }) ->
+          replaceVarsInAbsIdParam reps (startPos arg) (endPos arg) idStr replaceWith
         (AstPair {frst = frst'@(AstId {idStr = arg0}), scnd = AstEmptyList {}}) ->
           replaceVarsInAbsIdParam reps (startPos frst') (endPos frst') arg0 replaceWith
         (AstPair {frst = frst'@(AstId {idStr = arg0}), scnd}) ->
