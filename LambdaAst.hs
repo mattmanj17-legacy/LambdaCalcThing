@@ -1,29 +1,22 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module LambdaAst where
 
-import MetaData
-
 import Text.Parsec.Pos
 
-data AstMetaData = AstMetaData
-  { startPos :: SourcePos
-  , endPos :: SourcePos
-  }
-  deriving(Eq)
-
 data Ast =
-  AstId String |
-  AstEmptyList |
-  AstPair (MetaData AstMetaData Ast) (MetaData AstMetaData Ast) |
-  AstApplication (MetaData AstMetaData Ast) (MetaData AstMetaData Ast)
+  AstId { startPos :: SourcePos, endPos :: SourcePos, idStr :: String} |
+  AstEmptyList { startPos :: SourcePos, endPos :: SourcePos } |
+  AstPair { startPos :: SourcePos, endPos :: SourcePos, frst :: Ast, scnd :: Ast } |
+  AstApplication { startPos :: SourcePos, endPos :: SourcePos, fn :: Ast, arg :: Ast }
   deriving(Eq)
 
 instance Show Ast where
-  show (AstId str) = str
-  show AstEmptyList = "[]"
-  show (AstPair frst scnd) = "<" ++ show (rawData frst) ++ ", " ++ show (rawData scnd) ++ ">"
-  show (AstApplication fn arg) = "(" ++ show (rawData fn) ++ " " ++ show (rawData arg) ++ ")"
+  show (AstId { idStr }) = idStr
+  show (AstEmptyList {}) = "[]"
+  show (AstPair { frst, scnd }) = "<" ++ show frst ++ ", " ++ show scnd ++ ">"
+  show (AstApplication { fn, arg }) = "(" ++ show fn ++ " " ++ show arg ++ ")"
 
 data Expr =
   ExprArgRef Int |

@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module ReduceLambda where
 
 import LambdaAst
-import MetaData
 import Fallible
 import Data.Maybe
 
@@ -14,8 +14,8 @@ import Data.Functor.Identity
 
 import Control.Monad.Writer
 
-errorStrAt :: AstMetaData -> String
-errorStrAt (AstMetaData start end) = 
+errorStrAt :: SourcePos -> SourcePos -> String
+errorStrAt start end = 
   concat
     [ "<"
     , (show (sourceLine start))
@@ -28,20 +28,20 @@ errorStrAt (AstMetaData start end) =
     , ">"
     ]
 
-anonLambda :: MetaData AstMetaData Ast ->  FallibleT (Writer [String]) Expr
+anonLambda :: Ast ->  FallibleT (Writer [String]) Expr
 anonLambda = replaceVars []
 
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
-replaceVars :: [(String, Int)] -> MetaData AstMetaData Ast -> FallibleT (Writer [String]) Expr
+replaceVars :: [(String, Int)] -> Ast -> FallibleT (Writer [String]) Expr
 replaceVars reps expr = do
   --fallibleLiftM $ tell ["replaceVars in " ++ show (rawData expr)]
-  case rawData expr of
-    (AstId str) -> replaceVarsInId reps (metaData expr) str
-    (AstPair frst scnd) -> replaceVarsInPair reps (frst, scnd)
-    (AstApplication fn arg) -> replaceVarsInApp reps (fn, arg)
-    AstEmptyList -> do
+  case expr of
+    (AstId sp ep str) -> replaceVarsInId reps sp ep str
+    (AstPair {frst, scnd}) -> replaceVarsInPair reps (frst, scnd)
+    (AstApplication _ _ fn arg) -> replaceVarsInApp reps (fn, arg)
+    AstEmptyList _ _ -> do
       --fallibleLiftM $ tell ["left empty list alone"]
       return ExprEmptyList
 
@@ -51,73 +51,60 @@ hoogoo a = (a, mempty)
 writerLiftM :: (Functor m, Monoid logType) => m a -> WriterT logType m a
 writerLiftM x = WriterT (fmap hoogoo x)
 
-replaceVarsInId :: [(String, Int)] -> AstMetaData -> String -> FallibleT (Writer [String]) Expr
-replaceVarsInId reps md str = do
+replaceVarsInId :: [(String, Int)] -> SourcePos -> SourcePos -> String -> FallibleT (Writer [String]) Expr
+replaceVarsInId reps sp ep str = do
   --fallibleLiftM $ tell ["replaceVarsInId " ++ str]
-  maybe (throwE $ (errorStrAt md) ++ " unrecognized id " ++ str) (return . ExprArgRef) (lookup str reps)
+  maybe (throwE $ (errorStrAt sp ep) ++ " unrecognized id " ++ str) (return . ExprArgRef) (lookup str reps)
 
-replaceVarsInPair :: [(String, Int)] -> (MetaData AstMetaData Ast, MetaData AstMetaData Ast) -> FallibleT (Writer [String]) Expr
+replaceVarsInPair :: [(String, Int)] -> (Ast, Ast) -> FallibleT (Writer [String]) Expr
 replaceVarsInPair reps (frst, scnd) = do
   --fallibleLiftM $ tell ["replaceVarsInPair"]
   newFrst <- replaceVars reps frst
   newScnd <- replaceVars reps scnd
   return $ ExprPair newFrst newScnd
 
-replaceVarsInApp :: [(String, Int)] -> (MetaData AstMetaData Ast, MetaData AstMetaData Ast) -> FallibleT (Writer [String]) Expr
-replaceVarsInApp reps (fn, arg) = do
-  --fallibleLiftM $ tell ["replaceVarsInApp (" ++ show (rawData fn) ++ ", " ++ show (rawData arg) ++ ")"]
-  case rawData fn of
-    (AstApplication fn' arg') ->
-      case rawData fn' of
-        (AstId "fn") ->
-          case rawData arg' of
-            (AstId param) ->
-              replaceVarsInAbsIdParam reps (metaData arg') param arg
-            (AstPair frst scnd) ->
-              case rawData frst of
-                (AstId arg0) ->
-                  case rawData scnd of
-                    AstEmptyList -> 
-                      replaceVarsInAbsIdParam reps (metaData frst) arg0 arg
-                    _ ->
-                      let
-                        body = 
-                          (MetaData
-                            (metaData scnd)
-                            (AstApplication
-                              (MetaData
-                                (metaData scnd)
-                                (AstApplication
-                                  fn'
-                                  scnd
-                                )
-                              )
-                              arg
-                            )
-                          )
-                      in
-                        replaceVarsInAbsIdParam reps (metaData frst) arg0 body
-                _ -> 
-                  throwE $ (errorStrAt (metaData frst)) ++ " non id in params list for fn"
-            AstEmptyList -> 
-              throwE $ (errorStrAt (metaData arg')) ++ " empty params list for fn"
-            unexpected ->
-              throwE $ (errorStrAt (metaData arg')) ++ " ill formed params list " ++ show unexpected
-        _ -> defalut
-    _ -> defalut
-  where
-    defalut = replaceVarsInAppDefault reps (fn, arg)
+replaceVarsInApp :: [(String, Int)] -> (Ast, Ast) -> FallibleT (Writer [String]) Expr
+replaceVarsInApp reps (replaceIn, replaceWith) = do
+  case replaceIn of
+    (AstApplication {fn = fn'@(AstId {idStr = "fn"}), arg}) ->
+      case arg of
+        (AstId {idStr = param}) ->
+          replaceVarsInAbsIdParam reps (startPos arg) (endPos arg) param replaceWith
+        (AstPair {frst = frst'@(AstId {idStr = arg0}), scnd = AstEmptyList {}}) ->
+          replaceVarsInAbsIdParam reps (startPos frst') (endPos frst') arg0 replaceWith
+        (AstPair {frst = frst'@(AstId {idStr = arg0}), scnd}) ->
+          let
+            body = 
+              (AstApplication
+                (startPos fn') (endPos replaceWith)
+                (AstApplication
+                  (startPos fn') (endPos scnd)
+                  fn'
+                  scnd
+                )
+                replaceWith
+              )
+          in
+            replaceVarsInAbsIdParam reps (startPos frst') (endPos frst') arg0 body
+        (AstPair { frst }) ->
+          throwE $ (errorStrAt (startPos frst) (endPos frst)) ++ " non id in params list for fn"
+        (AstEmptyList {}) ->
+          throwE $ (errorStrAt (startPos arg) (endPos arg)) ++ " empty params list for fn"
+        _ -> 
+          throwE $ (errorStrAt (startPos arg) (endPos arg)) ++ " ill formed params list " ++ show arg
+    _ ->
+      replaceVarsInAppDefault reps (replaceIn, replaceWith)
 
-replaceVarsInAppDefault :: [(String, Int)] -> (MetaData AstMetaData Ast, MetaData AstMetaData Ast) -> FallibleT (Writer [String]) Expr
-replaceVarsInAppDefault reps (fn, arg) = do
-  fnReplaced <- replaceVars reps fn
-  argReplaced <- replaceVars reps arg
+replaceVarsInAppDefault :: [(String, Int)] -> (Ast, Ast) -> FallibleT (Writer [String]) Expr
+replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
+  fnReplaced <- replaceVars reps replaceIn
+  argReplaced <- replaceVars reps replaceWith
   return $ ExprApplication fnReplaced argReplaced
 
-replaceVarsInAbsIdParam :: [(String, Int)] -> AstMetaData -> String -> MetaData AstMetaData Ast -> FallibleT (Writer [String]) Expr
-replaceVarsInAbsIdParam reps strMd str body = do
+replaceVarsInAbsIdParam :: [(String, Int)] -> SourcePos -> SourcePos -> String -> Ast -> FallibleT (Writer [String]) Expr
+replaceVarsInAbsIdParam reps sp ep str body = do
   if isJust $ lookup str reps then
-    throwE $ (errorStrAt strMd) ++ " replaceVarsInAbsIdParam blew up because we were going to shadow a param"
+    throwE $ (errorStrAt sp ep) ++ " replaceVarsInAbsIdParam blew up because we were going to shadow a param"
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body

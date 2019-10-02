@@ -11,7 +11,6 @@ import Text.ParserCombinators.Parsec
 import ParseCommon
 
 import LambdaAst
-import MetaData
 
 parseIgnore :: SimpleParser ()
 parseIgnore = do
@@ -25,38 +24,28 @@ parseComment = do
   _ <- many (noneOf "\n")
   return ()
 
-parseLambda :: SimpleParser (MetaData AstMetaData Ast)
+parseLambda :: SimpleParser Ast
 parseLambda =
   parseId <|>
   parseList <|>
   parseParens
 
-parseId :: SimpleParser (MetaData AstMetaData Ast)
+parseId :: SimpleParser Ast
 parseId = do
   _ <- parseIgnore
   posStart <- getPosition
   str <- many1 letter
   posEnd <- getPosition
   _ <- parseIgnore
-  return (MetaData (AstMetaData posStart posEnd) (AstId str))
+  return (AstId posStart posEnd str)
 
-listToPairs :: MetaData AstMetaData [MetaData AstMetaData Ast] -> MetaData AstMetaData Ast
-listToPairs (MetaData md []) = 
-  MetaData md AstEmptyList
-listToPairs (MetaData md (a:rest)) = 
-  (MetaData md 
-    (AstPair 
-      a 
-      (listToPairs 
-        (MetaData 
-          (AstMetaData (endPos (metaData a)) (endPos md))
-          rest
-        )
-      )
-    )
-  )
+listToPairs :: SourcePos -> SourcePos -> [Ast] -> Ast
+listToPairs sp ep [] = 
+  AstEmptyList sp ep
+listToPairs sp ep (a:rest) = 
+    (AstPair sp ep a (listToPairs (endPos a) ep rest))
 
-parseList :: SimpleParser (MetaData AstMetaData Ast) 
+parseList :: SimpleParser Ast 
 parseList = do
   _ <- parseIgnore
   posStart <- getPosition
@@ -67,39 +56,29 @@ parseList = do
   _ <- char ']'
   posEnd <- getPosition
   _ <- parseIgnore
-  return (listToPairs (MetaData (AstMetaData posStart posEnd) elems))
+  return (listToPairs posStart posEnd elems)
 
-parseParens :: SimpleParser (MetaData AstMetaData Ast)
+parseParens :: SimpleParser Ast
 parseParens = do
   _ <- parseIgnore
-  posStart <- getPosition
   _ <- char '('
   _ <- parseIgnore
   result <- parseApplication
   _ <- parseIgnore
   _ <- char ')'
-  posEnd <- getPosition
   _ <- parseIgnore
-  return (MetaData (AstMetaData posStart posEnd) (rawData result))
+  return result
 
-listToApps :: MetaData AstMetaData [MetaData AstMetaData Ast] -> MetaData AstMetaData Ast
-listToApps (MetaData _ []) = undefined
-listToApps (MetaData _ [a]) = a
-listToApps (MetaData md (a:b:rest)) = 
-  listToApps 
-    (MetaData md 
-      ((:)
-        (MetaData
-          (AstMetaData (startPos (metaData a)) (endPos (metaData b)))
-          (AstApplication a b)
-        )
-        rest
-      )
-    )
+listToApps :: SourcePos -> SourcePos -> [Ast] -> Ast
+listToApps _ _ [] = undefined
+listToApps _ _ [a] = a
+listToApps sp ep (a:b:rest) = 
+  listToApps sp ep 
+    ((AstApplication (startPos a) (endPos b) a b):rest)
 
-parseApplication :: SimpleParser (MetaData AstMetaData Ast)
+parseApplication :: SimpleParser Ast
 parseApplication = do
   posStart <- getPosition
   terms <- sepBy1 parseLambda parseIgnore
   posEnd <- getPosition
-  return (listToApps (MetaData (AstMetaData posStart posEnd) terms))
+  return (listToApps posStart posEnd terms)
