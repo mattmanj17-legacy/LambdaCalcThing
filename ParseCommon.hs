@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Werror #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module ParseCommon where

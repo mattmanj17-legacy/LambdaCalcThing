@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE NamedFieldPuns #-}
+{-# OPTIONS_GHC -Werror #-}
 
 module LambdaAst where
 
@@ -13,10 +13,10 @@ data Ast =
   deriving(Eq)
 
 instance Show Ast where
-  show (AstId { idStr }) = idStr
+  show ast@(AstId {}) = idStr ast
   show (AstEmptyList {}) = "[]"
-  show (AstPair { frst, scnd }) = "<" ++ show frst ++ ", " ++ show scnd ++ ">"
-  show (AstApplication { fn, arg }) = "(" ++ show fn ++ " " ++ show arg ++ ")"
+  show ast@(AstPair {}) = "<" ++ show (frst ast) ++ ", " ++ show (scnd ast) ++ ">"
+  show ast@(AstApplication {}) = "(" ++ show (fn ast) ++ " " ++ show (arg ast) ++ ")"
 
 data Expr =
   ExprArgRef Int |
