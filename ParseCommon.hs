@@ -8,7 +8,7 @@ import Text.Parsec.Prim
 
 import Data.Functor.Identity
 
-import Fallible
+import Control.Monad.Trans.Except
 
 type SimpleParser result = GenParser Char () result
 
@@ -27,5 +27,5 @@ parseFallible ::
   Parsec s () a -> 
   SourceName -> 
   s -> 
-  FallibleT m a
-parseFallible parseFn file = (either (FallibleT . return . Left . show) (FallibleT . return . Right)) . (parse parseFn file)
+  ExceptT String m a
+parseFallible parseFn file = (either (throwE . show) return) . (parse parseFn file)

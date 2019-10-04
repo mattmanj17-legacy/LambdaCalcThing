@@ -5,12 +5,10 @@
 module ReduceLambda where
 
 import LambdaAst
-import Fallible
+import Control.Monad.Trans.Except
 import Data.Maybe
 
 import Text.Parsec.Pos
-
-import Data.Functor.Identity
 
 import Control.Monad.Writer
 
@@ -28,16 +26,15 @@ errorStrAt start end =
     , ">"
     ]
 
-anonLambda :: Ast ->  FallibleT (Writer [String]) Expr
+anonLambda :: (Monad m) => Ast -> ExceptT String (WriterT [String] m) Expr
 anonLambda = replaceVars []
 
 incReps :: [(String, Int)] -> [(String, Int)]
 incReps = map ((,) <$> fst <*> (+1) . snd)
 
--- example of 'tell' --- fallibleLiftM $ tell ["replaceVars in " ++ show (rawData expr)]
-
-replaceVars :: [(String, Int)] -> Ast -> FallibleT (Writer [String]) Expr
+replaceVars :: (Monad m) => [(String, Int)] -> Ast -> ExceptT String (WriterT [String] m) Expr
 replaceVars reps expr = do
+  lift $ tell ["replaceVars in " ++ show expr] -- example of lift, keeping around
   case expr of
     (AstId sp ep str) -> replaceVarsInId reps sp ep str
     (AstPair {frst, scnd}) -> replaceVarsInPair reps (frst, scnd)
@@ -45,23 +42,17 @@ replaceVars reps expr = do
     AstEmptyList {} -> do
       return ExprEmptyList
 
-hoogoo :: Monoid w => a -> (a, w)
-hoogoo a = (a, mempty)
-
-writerLiftM :: (Functor m, Monoid logType) => m a -> WriterT logType m a
-writerLiftM x = WriterT (fmap hoogoo x)
-
-replaceVarsInId :: [(String, Int)] -> SourcePos -> SourcePos -> String -> FallibleT (Writer [String]) Expr
+replaceVarsInId :: (Monad m) => [(String, Int)] -> SourcePos -> SourcePos -> String -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInId reps sp ep str = do
   maybe (throwE $ (errorStrAt sp ep) ++ " unrecognized id " ++ str) (return . ExprArgRef) (lookup str reps)
 
-replaceVarsInPair :: [(String, Int)] -> (Ast, Ast) -> FallibleT (Writer [String]) Expr
+replaceVarsInPair :: (Monad m) => [(String, Int)] -> (Ast, Ast) -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInPair reps (frst, scnd) = do
   newFrst <- replaceVars reps frst
   newScnd <- replaceVars reps scnd
   return $ ExprPair newFrst newScnd
 
-replaceVarsInApp :: [(String, Int)] -> (Ast, Ast) -> FallibleT (Writer [String]) Expr
+replaceVarsInApp :: (Monad m) => [(String, Int)] -> (Ast, Ast) -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInApp reps (replaceIn, replaceWith) = do
   case replaceIn of
     (AstApplication {fn = fn'@(AstId {idStr = "fn"}), arg}) ->
@@ -93,13 +84,13 @@ replaceVarsInApp reps (replaceIn, replaceWith) = do
     _ ->
       replaceVarsInAppDefault reps (replaceIn, replaceWith)
 
-replaceVarsInAppDefault :: [(String, Int)] -> (Ast, Ast) -> FallibleT (Writer [String]) Expr
+replaceVarsInAppDefault :: (Monad m) => [(String, Int)] -> (Ast, Ast) -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
   fnReplaced <- replaceVars reps replaceIn
   argReplaced <- replaceVars reps replaceWith
   return $ ExprApplication fnReplaced argReplaced
 
-replaceVarsInAbsIdParam :: [(String, Int)] -> SourcePos -> SourcePos -> String -> Ast -> FallibleT (Writer [String]) Expr
+replaceVarsInAbsIdParam :: (Monad m) => [(String, Int)] -> SourcePos -> SourcePos -> String -> Ast -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInAbsIdParam reps sp ep str body = do
   if isJust $ lookup str reps then
     throwE $ (errorStrAt sp ep) ++ " replaceVarsInAbsIdParam blew up because we were going to shadow a param"
@@ -110,7 +101,7 @@ replaceVarsInAbsIdParam reps sp ep str body = do
 
 -- REDUX
 
-lambdasBetaReducedOneStep :: [Expr] -> FallibleT Identity [Expr]
+lambdasBetaReducedOneStep :: (Monad m) => [Expr] -> ExceptT String m [Expr]
 lambdasBetaReducedOneStep [] =
   return []
 
@@ -126,7 +117,7 @@ lambdasBetaReducedOneStep (term:rest) = do
   else do
     return (termReducedOnce:rest)
 
-lambdaBetaReducedOneStep :: Expr -> FallibleT Identity Expr
+lambdaBetaReducedOneStep :: (Monad m) => Expr -> ExceptT String m Expr
 lambdaBetaReducedOneStep argRef@(ExprArgRef _) =
   return argRef
 
@@ -155,7 +146,7 @@ lambdaBetaReducedOneStep ExprEmptyList = do
   return ExprEmptyList
 
 
-lambdaBetaReducedFull :: Expr -> FallibleT Identity Expr
+lambdaBetaReducedFull :: (Monad m) => Expr -> ExceptT String m Expr
 lambdaBetaReducedFull term = do
   reducedOnce <- lambdaBetaReducedOneStep term
   if term == reducedOnce then do
@@ -163,12 +154,12 @@ lambdaBetaReducedFull term = do
   else do
     lambdaBetaReducedFull reducedOnce
 
-lambdaAppliedTo :: Expr -> Expr -> FallibleT Identity Expr
+lambdaAppliedTo :: (Monad m) => Expr -> Expr -> ExceptT String m Expr
 lambdaAppliedTo = 
   lambdaArgRefReplacedWithLambda 1
 
 
-lambdaArgRefReplacedWithLambda :: Int -> Expr -> Expr -> FallibleT Identity Expr
+lambdaArgRefReplacedWithLambda :: (Monad m) => Int -> Expr -> Expr -> ExceptT String m Expr
 lambdaArgRefReplacedWithLambda argRefReplace arg (ExprArgRef argRef) = do
   if argRefReplace == argRef then do
     inced <- lambdaIncrementedArgRefsGreaterThanOrEqual arg 1 argRef
@@ -196,7 +187,7 @@ lambdaArgRefReplacedWithLambda _ _ ExprEmptyList = do
   return ExprEmptyList
   
 
-lambdaIncrementedArgRefsGreaterThanOrEqual :: Expr -> Int -> Int -> FallibleT Identity Expr
+lambdaIncrementedArgRefsGreaterThanOrEqual :: (Monad m) => Expr -> Int -> Int -> ExceptT String m Expr
 lambdaIncrementedArgRefsGreaterThanOrEqual lar@(ExprArgRef argRef) argRefPatchMin argRefReplacing
   | argRef < argRefPatchMin = return lar
   | otherwise = return (ExprArgRef (argRef + argRefReplacing - 1))
