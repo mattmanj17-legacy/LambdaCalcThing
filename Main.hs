@@ -65,7 +65,7 @@ tests = do
   let fileLines = lines cleanStr
   parsed <- parseFallible parseLambda "test.txt" cleanStr
   compiled <- anonLambda fileLines parsed
-  reduced <- lambdaBetaReducedFull compiled
+  let reduced = lambdaBetaReducedFull compiled
   case reduced of
     epair@(ExprPair _ _) -> return $ (map runTest) (zip [0..] (flattenList epair))
     _ -> throwE "test.txt did not evaluate to a list!!!"
