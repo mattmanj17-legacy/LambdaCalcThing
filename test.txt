@@ -204,7 +204,7 @@
 
 	-- pred
 
-	(fn [n f x]
+	(fn [n (f x) x]
 		(
 			n 
 			(fn [g h] 

@@ -7,6 +7,7 @@ import ParseLambda
 import ReduceLambda
 import ParseCommon
 import Data.Maybe
+import Data.Bool
 
 import Control.Monad.Writer
 
@@ -54,11 +55,16 @@ flattenList (ExprPair frst' scnd') = frst':(flattenList scnd')
 flattenList ExprEmptyList = []
 flattenList expr = [expr]
 
+replaceTabs :: String -> String
+replaceTabs =  concatMap ((bool <$> (:[]) <*> (const "    ") <*> (=='\t')))
+
 tests :: ExceptT String (WriterT [String] IO) [ExceptT String Maybe (Int, Expr, Expr)]
 tests = do
   str <- lift $ lift $ readFile "test.txt"
-  parsed <- parseFallible parseLambda "test.txt" str
-  compiled <- anonLambda parsed
+  let cleanStr = replaceTabs str
+  let fileLines = lines cleanStr
+  parsed <- parseFallible parseLambda "test.txt" cleanStr
+  compiled <- anonLambda fileLines parsed
   reduced <- lambdaBetaReducedFull compiled
   case reduced of
     epair@(ExprPair _ _) -> return $ (map runTest) (zip [0..] (flattenList epair))
