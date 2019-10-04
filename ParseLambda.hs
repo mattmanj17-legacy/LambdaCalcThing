@@ -44,7 +44,7 @@ listToPairs :: SourcePos -> SourcePos -> [Ast] -> Ast
 listToPairs sp ep [] = 
   AstEmptyList sp ep
 listToPairs sp ep (a:rest) = 
-    (AstPair sp ep a (listToPairs (endPos a) ep rest))
+  (AstPair sp ep a (listToPairs (srcposAstEnd a) ep rest))
 
 parseList :: SimpleParser Ast 
 parseList = do
@@ -75,7 +75,7 @@ listToApps _ _ [] = undefined
 listToApps _ _ [a] = a
 listToApps sp ep (a:b:rest) = 
   listToApps sp ep 
-    ((AstApplication (startPos a) (endPos b) a b):rest)
+    ((AstApplication (srcposAstStart a) (srcposAstEnd b) a b):rest)
 
 parseApplication :: SimpleParser Ast
 parseApplication = do

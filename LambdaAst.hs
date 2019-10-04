@@ -5,18 +5,28 @@ module LambdaAst where
 
 import Text.Parsec.Pos
 
+-- Lambda ast, the "sweet" version we parse in
+
 data Ast =
-  AstId { startPos :: SourcePos, endPos :: SourcePos, idStr :: String} |
-  AstEmptyList { startPos :: SourcePos, endPos :: SourcePos } |
-  AstPair { startPos :: SourcePos, endPos :: SourcePos, frst :: Ast, scnd :: Ast } |
-  AstApplication { startPos :: SourcePos, endPos :: SourcePos, fn :: Ast, arg :: Ast }
+  AstId { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos, strAstId :: String} |
+  AstEmptyList { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos } |
+  AstPair { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos, astFst :: Ast, astSnd :: Ast } |
+  AstApplication { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos, astFn :: Ast, astArg :: Ast }
   deriving(Eq)
 
+mkAstPair :: Ast -> Ast -> Ast
+mkAstPair frst scnd = AstPair (srcposAstStart frst) (srcposAstEnd scnd) frst scnd
+
+mkAstApp :: Ast -> Ast -> Ast
+mkAstApp fn arg = AstApplication (srcposAstStart fn) (srcposAstEnd arg) fn arg
+
 instance Show Ast where
-  show ast@(AstId {}) = idStr ast
+  show ast@(AstId {}) = strAstId ast
   show (AstEmptyList {}) = "[]"
-  show ast@(AstPair {}) = "<" ++ show (frst ast) ++ ", " ++ show (scnd ast) ++ ">"
-  show ast@(AstApplication {}) = "(" ++ show (fn ast) ++ " " ++ show (arg ast) ++ ")"
+  show ast@(AstPair {}) = "<" ++ show (astFst ast) ++ ", " ++ show (astSnd ast) ++ ">"
+  show ast@(AstApplication {}) = "(" ++ show (astFn ast) ++ " " ++ show (astArg ast) ++ ")"
+
+-- Lambda Expr, desugared ast, that we can do beta reduction on
 
 data Expr =
   ExprArgRef Int |
