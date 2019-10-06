@@ -235,7 +235,7 @@ lambdaAppliedTo =
 lambdaArgRefReplacedWithLambda :: Int -> Expr -> Expr -> Expr
 lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprArgRef argRef) = 
   if argRefReplace == argRef then 
-    lambdaIncrementedArgRefsGreaterThanOrEqual arg' 1 argRef
+    lambdaIncrementedArgRefsGreaterThanOrEqual 1 argRef arg'
   else if argRefReplace < argRef then
     (ExprArgRef (argRef-1))
   else
@@ -260,23 +260,23 @@ lambdaArgRefReplacedWithLambda _ _ ExprEmptyList =
   ExprEmptyList
   
 
-lambdaIncrementedArgRefsGreaterThanOrEqual :: Expr -> Int -> Int -> Expr
-lambdaIncrementedArgRefsGreaterThanOrEqual lar@(ExprArgRef argRef) argRefPatchMin argRefReplacing
+lambdaIncrementedArgRefsGreaterThanOrEqual :: Int -> Int -> Expr -> Expr
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing lar@(ExprArgRef argRef)
   | argRef < argRefPatchMin = lar
   | otherwise = (ExprArgRef (argRef + argRefReplacing - 1))
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (ExprPair frst' scnd') argRefPatchMin argRefReplacing =
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprPair frst' scnd') =
   (ExprPair (incElem frst') (incElem scnd'))
   where
-    incElem elem' = lambdaIncrementedArgRefsGreaterThanOrEqual elem' argRefPatchMin argRefReplacing
+    incElem = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (ExprAbstraction body) argRefPatchMin argRefReplacing =
-  ExprAbstraction $ lambdaIncrementedArgRefsGreaterThanOrEqual body (argRefPatchMin + 1) argRefReplacing
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprAbstraction body) =
+  ExprAbstraction $ lambdaIncrementedArgRefsGreaterThanOrEqual (argRefPatchMin + 1) argRefReplacing body
 
-lambdaIncrementedArgRefsGreaterThanOrEqual (ExprApplication func arg') argRefPatchMin argRefReplacing =
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprApplication func arg') =
   ExprApplication (incTerm func) (incTerm arg')
   where
-    incTerm term = lambdaIncrementedArgRefsGreaterThanOrEqual term argRefPatchMin argRefReplacing
+    incTerm = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
 
-lambdaIncrementedArgRefsGreaterThanOrEqual ExprEmptyList _ _ =
+lambdaIncrementedArgRefsGreaterThanOrEqual _ _ ExprEmptyList =
   ExprEmptyList
