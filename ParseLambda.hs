@@ -29,7 +29,7 @@ parseLambda :: SimpleParser Ast
 parseLambda =
   parseId <|>
   parseList <|>
-  parseParens
+  parseApplication
 
 parseId :: SimpleParser Ast
 parseId = do
@@ -59,27 +59,24 @@ parseList = do
   _ <- parseIgnore
   return (listToPairs posStart posEnd elems)
 
-parseParens :: SimpleParser Ast
-parseParens = do
+parseApplication :: SimpleParser Ast
+parseApplication = do
   _ <- parseIgnore
+  posStart <- getPosition
   _ <- char '('
   _ <- parseIgnore
-  result <- parseApplication
+  terms <- sepBy1 parseLambda parseIgnore
   _ <- parseIgnore
   _ <- char ')'
+  posEnd <- getPosition
   _ <- parseIgnore
-  return result
+  return (listToApps posStart posEnd terms)
 
 listToApps :: SourcePos -> SourcePos -> [Ast] -> Ast
 listToApps _ _ [] = undefined
 listToApps _ _ [a] = a
+listToApps sp ep [a, b] = 
+  (AstApplication sp ep a b)
 listToApps sp ep (a:b:rest) = 
   listToApps sp ep 
     ((AstApplication (srcposAstStart a) (srcposAstEnd b) a b):rest)
-
-parseApplication :: SimpleParser Ast
-parseApplication = do
-  posStart <- getPosition
-  terms <- sepBy1 parseLambda parseIgnore
-  posEnd <- getPosition
-  return (listToApps posStart posEnd terms)

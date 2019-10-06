@@ -13,10 +13,16 @@ import Control.Monad.Writer
 
 errorStrAt :: [String] -> Ast -> String -> String
 errorStrAt fileLines ast strMsg =
-   unlines (((posStr ++ " " ++strMsg):viewedLines) ++ [honk])
+  unlines $ posStr:viewedLinesColored
   where
-    viewedLines = (take (endLine - startLine + 1)) $ (drop (startLine - 1)) fileLines
-    honk = (replicate (startChar - 1) '+') ++ (replicate (endChar - startChar) '-')
+    start = srcposAstStart ast
+    end = srcposAstEnd ast
+
+    startLine = (sourceLine start)
+    startChar = (sourceColumn start)
+    endLine = (sourceLine end)
+    endChar = (sourceColumn end)
+
     posStr = 
       concat
         [ "<"
@@ -27,14 +33,24 @@ errorStrAt fileLines ast strMsg =
         , (show endLine)
         , ":"
         , (show endChar)
-        , ">"
+        , "> "
+        , strMsg
         ]
-    startLine = (sourceLine start)
-    endLine = (sourceLine end)
-    startChar = (sourceColumn start)
-    endChar = (sourceColumn end)
-    start = srcposAstStart ast
-    end = srcposAstEnd ast
+
+    mapFirst _ [] = []
+    mapFirst fn (x:xs) = (fn x):xs
+
+    mapLast _ [] = []
+    mapLast fn [x] = [fn x]
+    mapLast fn (x:xs) = x:(mapLast fn xs)
+
+    insert n xsInsert xsModify = 
+      xsStart ++ xsInsert ++ xsEnd
+      where
+        (xsStart, xsEnd) = splitAt n xsModify
+
+    viewedLines = (take (endLine - startLine + 1)) $ (drop (startLine - 1)) fileLines
+    viewedLinesColored = ((mapFirst (insert (startChar - 1) "\x1b[31m")) . (mapLast (insert (endChar - 1) "\x1b[0m"))) viewedLines
 
 anonLambda :: (Monad m) => [String] -> Ast -> ExceptT String (WriterT [String] m) Expr
 anonLambda fileLines = replaceVars fileLines []
@@ -55,7 +71,7 @@ replaceVars fileLines reps expr = do
 replaceVarsInId :: (Monad m) => [String] -> [(String, Int)] -> Ast -> String -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInId fileLines reps astParent str = do
   lift $ tell ["replaceVarsInId " ++ show reps ++ " " ++ show astParent ++ " " ++ show str]
-  maybe (throwE $ (errorStrAt fileLines astParent (" unrecognized id " ++ str))) (return . ExprArgRef) (lookup str reps)
+  maybe (throwE $ (errorStrAt fileLines astParent ("unrecognized id " ++ str))) (return . ExprArgRef) (lookup str reps)
 
 replaceVarsInPair :: (Monad m) => [String] -> [(String, Int)] -> (Ast, Ast) -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInPair fileLines reps (astFirst, astSecond) = do
@@ -82,9 +98,9 @@ replaceVarsInAppFn fileLines reps fn (params, body) = do
     (AstPair {astFst = frst, astSnd = scnd}) ->
       replaceVarsInAppFnParamsPair fileLines reps fn (frst, scnd, body)
     (AstEmptyList {}) ->
-      throwE $ errorStrAt fileLines params " empty params list for fn"
+      throwE $ errorStrAt fileLines params "empty params list for fn"
     _ -> 
-      throwE $ errorStrAt fileLines params (" ill formed params list " ++ show params)
+      throwE $ errorStrAt fileLines params ("ill formed params list " ++ show params)
 
 replaceVarsInAppFnParamsPair :: (Monad m) => [String] -> [(String, Int)] -> Ast -> (Ast, Ast, Ast) -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInAppFnParamsPair fileLines reps fn (paramsFrst, paramsScnd, body) = do
@@ -97,7 +113,7 @@ replaceVarsInAppFnParamsPair fileLines reps fn (paramsFrst, paramsScnd, body) = 
         _ -> 
           replaceVarsInAbsIdParam fileLines reps paramsFrst idStr (mkAstApp (mkAstApp fn paramsScnd) body)
     _ -> 
-      throwE $ errorStrAt fileLines paramsFrst " non id in params list for fn"
+      throwE $ errorStrAt fileLines paramsFrst "non id in params list for fn"
 
 replaceVarsInAppDefault :: (Monad m) => [String] -> [(String, Int)] -> (Ast, Ast) -> ExceptT String (WriterT [String] m) Expr
 replaceVarsInAppDefault fileLines reps (replaceIn, replaceWith) = do
@@ -110,7 +126,7 @@ replaceVarsInAbsIdParam :: (Monad m) => [String] -> [(String, Int)] -> Ast -> St
 replaceVarsInAbsIdParam fileLines reps astId str body = do
   lift $ tell ["replaceVarsInAbsIdParam " ++ show reps ++ " " ++ show astId ++ " " ++ show str ++ " " ++ show body]
   if isJust $ lookup str reps then
-    throwE $ errorStrAt fileLines astId " replaceVarsInAbsIdParam blew up because we were going to shadow a param"
+    throwE $ errorStrAt fileLines astId "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars fileLines newreps body
