@@ -10,6 +10,7 @@ import Data.Maybe
 import Data.Bool
 
 import Control.Monad.Writer
+import Control.Monad.Reader
 
 doIf :: Monad m => Bool -> m () -> m ()
 doIf cond action = if cond then do action else return ()
@@ -64,7 +65,8 @@ tests = do
   let cleanStr = replaceTabs str
   let fileLines = lines cleanStr
   parsed <- parseFallible parseLambda "test.txt" cleanStr
-  compiled <- anonLambda fileLines parsed
+  let compile = runReaderT $ runWriterT $ runExceptT $ anonLambda parsed
+  compiled <- ExceptT $ WriterT $ compile fileLines
   let reduced = lambdaBetaReducedFull compiled
   case reduced of
     epair@(ExprPair _ _) -> return $ (map runTest) (zip [0..] (flattenList epair))
