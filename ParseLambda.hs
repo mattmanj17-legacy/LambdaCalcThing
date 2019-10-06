@@ -26,18 +26,17 @@ parseComment = do
   return ()
 
 parseLambda :: SimpleParser Ast
-parseLambda =
-  parseId <|>
-  parseList <|>
-  parseApplication
+parseLambda = do
+  _ <- parseIgnore
+  parsed <- parseId <|> parseList <|> parseApplication
+  _ <- parseIgnore
+  return parsed
 
 parseId :: SimpleParser Ast
 parseId = do
-  _ <- parseIgnore
   posStart <- getPosition
   str <- many1 letter
   posEnd <- getPosition
-  _ <- parseIgnore
   return (AstId posStart posEnd str)
 
 listToPairs :: SourcePos -> SourcePos -> [Ast] -> Ast
@@ -48,7 +47,6 @@ listToPairs sp ep (a:rest) =
 
 parseList :: SimpleParser Ast 
 parseList = do
-  _ <- parseIgnore
   posStart <- getPosition
   _ <- char '['
   _ <- parseIgnore
@@ -56,12 +54,10 @@ parseList = do
   _ <- parseIgnore
   _ <- char ']'
   posEnd <- getPosition
-  _ <- parseIgnore
   return (listToPairs posStart posEnd elems)
 
 parseApplication :: SimpleParser Ast
 parseApplication = do
-  _ <- parseIgnore
   posStart <- getPosition
   _ <- char '('
   _ <- parseIgnore
@@ -69,7 +65,6 @@ parseApplication = do
   _ <- parseIgnore
   _ <- char ')'
   posEnd <- getPosition
-  _ <- parseIgnore
   return (listToApps posStart posEnd terms)
 
 listToApps :: SourcePos -> SourcePos -> [Ast] -> Ast
