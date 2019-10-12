@@ -26,8 +26,8 @@ main = do
   case testReults' of
     (Left err) -> putStrLn err
     (Right []) -> putStrLn "all tests passed"
-    (Right failurs) -> do
-      _ <- sequence $ (map putStrLn) failurs
+    (Right failures) -> do
+      _ <- sequence $ (map putStrLn) failures
       return ()
 
 testResults :: ExceptT String (WriterT [String] IO) [String]

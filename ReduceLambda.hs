@@ -114,8 +114,103 @@ replaceVarsInApp reps (replaceIn, replaceWith) = do
   case replaceIn of
     (AstApplication {astFn = fn@(AstId {strAstId = "fn"}), astArg = arg}) ->
       replaceVarsInAppFn reps fn (arg, replaceWith)
+    (AstApplication {astFn = (AstId {strAstId = "letin"}), astArg = arg}) -> do
+      transformed <- transformLetin arg replaceWith
+      replaceVars reps transformed
     _ ->
       replaceVarsInAppDefault reps (replaceIn, replaceWith)
+
+transformLetin ::
+  (Monad m) => 
+  Ast ->
+  Ast ->
+  ExceptT String (WriterT [String] (ReaderT [String] m)) Ast
+transformLetin defs body = do
+  lift $ tell ["transformLetin " ++ show defs ++ " " ++ show body]
+  case defs of
+    AstId {} -> do
+      errStr <- lift $ lift $ errorStrAt defs "letin does not expect an id as its first argument"
+      throwE errStr
+    AstEmptyList {} ->
+      return body
+    AstPair {astFst = frst, astSnd = scnd} ->
+      transformLetinPairDefs frst scnd body
+    AstApplication {} -> do
+      errStr <- lift $ lift $ errorStrAt defs "letin does not expect an application as its first argument"
+      throwE errStr
+
+transformLetinPairDefs ::
+  (Monad m) => 
+  Ast ->
+  Ast ->
+  Ast ->
+  ExceptT String (WriterT [String] (ReaderT [String] m)) Ast
+transformLetinPairDefs defsFrst defsScnd body = do
+  lift $ tell ["transformLetinPairDefs " ++ show defsFrst ++ " " ++ show defsScnd ++ " " ++ show body]
+  case defsFrst of
+    AstId {} -> do
+      errStr <- lift $ lift $ errorStrAt defsFrst "unexpected id in defs list for letin"
+      throwE errStr
+    AstEmptyList {} -> do
+      errStr <- lift $ lift $ errorStrAt defsFrst "unexpected empty list in defs list for letin"
+      throwE errStr
+    AstPair {astFst = frstDefId, astSnd = frstDefValue} ->
+      transformLetinPairDef frstDefId frstDefValue defsScnd body
+    AstApplication {} -> do
+      errStr <- lift $ lift $ errorStrAt defsFrst "unexpected application in defs list for letin"
+      throwE errStr
+
+transformLetinPairDef ::
+  (Monad m) => 
+  Ast ->
+  Ast ->
+  Ast ->
+  Ast ->
+  ExceptT String (WriterT [String] (ReaderT [String] m)) Ast
+transformLetinPairDef frstDefId frstDefValue defsScnd body = do
+  lift $ tell ["transformLetinPairDef " ++ show frstDefId ++ " " ++ show frstDefValue ++ " " ++ show defsScnd ++ " " ++ show body]
+  case frstDefId of
+    AstId {} -> do
+      case frstDefValue of
+        AstId {} -> do
+          errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected id in def for letin : expected pair"
+          throwE errStr
+        AstEmptyList {} -> do
+          errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected empty list in def for letin : expected pair"
+          throwE errStr
+        AstPair {astFst = valFrst, astSnd = valScnd} ->
+          case valScnd of
+            AstEmptyList {} -> do
+              transformed <- transformLetin defsScnd body
+              return $
+                mkAstApp
+                  (mkAstApp 
+                    (mkAstApp 
+                      (AstId 
+                        (srcposAstStart frstDefId) 
+                        (srcposAstStart frstDefId) 
+                        "fn"
+                      ) 
+                      frstDefId
+                    ) 
+                    transformed
+                  )
+                  valFrst
+            _ -> do
+              errStr <- lift $ lift $ errorStrAt valScnd "unexpected value in def for letin : expected empty list"
+              throwE errStr
+        AstApplication {} -> do
+          errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected application in def for letin : expected pair"
+          throwE errStr
+    AstEmptyList {} -> do
+      errStr <- lift $ lift $ errorStrAt frstDefId "unexpected empty list in def for letin : expected id"
+      throwE errStr
+    AstPair {} -> do
+      errStr <- lift $ lift $ errorStrAt frstDefId "unexpected pair in def for letin : expected id"
+      throwE errStr
+    AstApplication {} -> do
+      errStr <- lift $ lift $ errorStrAt frstDefId "unexpected application in def for letin : expected id"
+      throwE errStr
 
 replaceVarsInAppFn :: 
   (Monad m) => 
