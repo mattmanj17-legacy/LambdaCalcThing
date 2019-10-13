@@ -102,7 +102,7 @@ replaceVarsInPair reps (astFirst, astSecond) = do
   lift $ tell ["replaceVarsInPair " ++ show reps ++ " " ++ show astFirst ++ " " ++ show astSecond]
   newFrst <- replaceVars reps astFirst
   newScnd <- replaceVars reps astSecond
-  return $ ExprPair newFrst newScnd
+  return $ ExprPair False newFrst newScnd
 
 replaceVarsInApp :: 
   (Monad m) =>
@@ -260,7 +260,7 @@ replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
   lift $ tell ["replaceVarsInAppDefault " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith]
   fnReplaced <- replaceVars reps replaceIn
   argReplaced <- replaceVars reps replaceWith
-  return $ ExprApplication fnReplaced argReplaced
+  return $ ExprApplication False fnReplaced argReplaced
 
 replaceVarsInAbsIdParam :: 
   (Monad m) => 
@@ -277,34 +277,46 @@ replaceVarsInAbsIdParam reps astId str body = do
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body
-    return (ExprAbstraction newBody)
+    return (ExprAbstraction False newBody)
 
 -- REDUX
 
-lambdaBetaReducedOneStep :: Expr -> Expr
-lambdaBetaReducedOneStep argRef@(ExprArgRef _) =
-  argRef
+isFullyReduced :: Expr -> Bool
+isFullyReduced expr =
+  case expr of
+    ExprArgRef {} -> True
+    ExprEmptyList {} -> True
+    ExprPair {isPairFullyReduced = reduced} -> reduced
+    ExprAbstraction {isAbsFullyReduced = reduced} -> reduced
+    ExprApplication {isAppFullyReduced = reduced} -> reduced
 
-lambdaBetaReducedOneStep (ExprPair frst' scnd') =
-  if newFrst == frst' then
-    (ExprPair newFrst newScnd)
+lambdaBetaReducedOneStep :: Expr -> Expr
+lambdaBetaReducedOneStep ar@(ExprArgRef _) =
+  ar
+
+lambdaBetaReducedOneStep (ExprPair _ frst' scnd') =
+  if isFullyReduced frst' then
+    (ExprPair (isFullyReduced newScnd) frst' newScnd)
   else
-    (ExprPair newFrst scnd')
+    (ExprPair False newFrst scnd')
   where
     newFrst = lambdaBetaReducedOneStep frst'
     newScnd = lambdaBetaReducedOneStep scnd'
 
-lambdaBetaReducedOneStep (ExprAbstraction val) =
-  ExprAbstraction $ lambdaBetaReducedOneStep val
+lambdaBetaReducedOneStep (ExprAbstraction _ val) =
+  if isFullyReduced val then
+    ExprAbstraction True val
+  else
+    ExprAbstraction False $ lambdaBetaReducedOneStep val
 
-lambdaBetaReducedOneStep (ExprApplication (ExprAbstraction func) arg') =
+lambdaBetaReducedOneStep (ExprApplication _ (ExprAbstraction _ func) arg') =
   lambdaAppliedTo arg' func
 
-lambdaBetaReducedOneStep (ExprApplication func arg') =
-  if newFunc == func then
-    (ExprApplication func newArg)
+lambdaBetaReducedOneStep (ExprApplication _ func arg') =
+  if isFullyReduced func then
+    (ExprApplication (isFullyReduced newArg) func newArg)
   else
-    (ExprApplication newFunc arg')
+    (ExprApplication False newFunc arg')
   where
     newFunc = lambdaBetaReducedOneStep func
     newArg = lambdaBetaReducedOneStep arg'
@@ -315,9 +327,9 @@ lambdaBetaReducedOneStep ExprEmptyList =
 
 lambdaBetaReducedFull :: Expr -> Expr
 lambdaBetaReducedFull term = 
-  if term == reducedOnce then do
+  if isFullyReduced term then
     term
-  else do
+  else
     lambdaBetaReducedFull reducedOnce
   where
     reducedOnce = lambdaBetaReducedOneStep term
@@ -328,25 +340,25 @@ lambdaAppliedTo =
 
 
 lambdaArgRefReplacedWithLambda :: Int -> Expr -> Expr -> Expr
-lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprArgRef argRef) = 
-  if argRefReplace == argRef then 
-    lambdaIncrementedArgRefsGreaterThanOrEqual 1 argRef arg'
-  else if argRefReplace < argRef then
-    (ExprArgRef (argRef-1))
+lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprArgRef ar) = 
+  if argRefReplace == ar then 
+    lambdaIncrementedArgRefsGreaterThanOrEqual 1 ar arg'
+  else if argRefReplace < ar then
+    (ExprArgRef (ar-1))
   else
-    (ExprArgRef argRef)
+    (ExprArgRef ar)
 
-lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprPair frst' scnd') = 
-  (ExprPair frstReplaced scndReplaced)
+lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprPair reduced frst' scnd') = 
+  (ExprPair reduced frstReplaced scndReplaced)
   where
     frstReplaced = lambdaArgRefReplacedWithLambda argRefReplace arg' frst'
     scndReplaced = lambdaArgRefReplacedWithLambda argRefReplace arg' scnd'
 
-lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprAbstraction body) = 
-  ExprAbstraction $ lambdaArgRefReplacedWithLambda (argRefReplace+1) arg' body
+lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprAbstraction reduced body) = 
+  ExprAbstraction reduced $ lambdaArgRefReplacedWithLambda (argRefReplace+1) arg' body
 
-lambdaArgRefReplacedWithLambda argRefReplace argReplace (ExprApplication func arg') = 
-  (ExprApplication funcReplaced argReplaced)
+lambdaArgRefReplacedWithLambda argRefReplace argReplace (ExprApplication reduced func arg') = 
+  (ExprApplication reduced funcReplaced argReplaced)
   where
     funcReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace func
     argReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace arg'
@@ -356,20 +368,20 @@ lambdaArgRefReplacedWithLambda _ _ ExprEmptyList =
   
 
 lambdaIncrementedArgRefsGreaterThanOrEqual :: Int -> Int -> Expr -> Expr
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing lar@(ExprArgRef argRef)
-  | argRef < argRefPatchMin = lar
-  | otherwise = (ExprArgRef (argRef + argRefReplacing - 1))
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing lar@(ExprArgRef ar)
+  | ar < argRefPatchMin = lar
+  | otherwise = (ExprArgRef (ar + argRefReplacing - 1))
 
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprPair frst' scnd') =
-  (ExprPair (incElem frst') (incElem scnd'))
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprPair reduced frst' scnd') =
+  (ExprPair reduced (incElem frst') (incElem scnd'))
   where
     incElem = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
 
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprAbstraction body) =
-  ExprAbstraction $ lambdaIncrementedArgRefsGreaterThanOrEqual (argRefPatchMin + 1) argRefReplacing body
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprAbstraction reduced body) =
+  ExprAbstraction reduced $ lambdaIncrementedArgRefsGreaterThanOrEqual (argRefPatchMin + 1) argRefReplacing body
 
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprApplication func arg') =
-  ExprApplication (incTerm func) (incTerm arg')
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprApplication reduced func arg') =
+  ExprApplication reduced (incTerm func) (incTerm arg')
   where
     incTerm = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
 

@@ -52,7 +52,7 @@ honkhonk x =
             show a
 
 flattenList :: Expr -> [Expr]
-flattenList (ExprPair frst' scnd') = frst':(flattenList scnd')
+flattenList (ExprPair _ frst' scnd') = frst':(flattenList scnd')
 flattenList ExprEmptyList = []
 flattenList expr = [expr]
 
@@ -69,11 +69,11 @@ tests = do
   compiled <- ExceptT $ WriterT $ compile fileLines
   let reduced = lambdaBetaReducedFull compiled
   case reduced of
-    epair@(ExprPair _ _) -> return $ (map runTest) (zip [0..] (flattenList epair))
+    epair@(ExprPair {}) -> return $ (map runTest) (zip [0..] (flattenList epair))
     _ -> throwE "test.txt did not evaluate to a list!!!"
 
 runTest :: (Int, Expr) -> ExceptT String Maybe (Int, Expr, Expr)
-runTest (iTest, (ExprPair a (ExprPair b ExprEmptyList)))
+runTest (iTest, (ExprPair _ a (ExprPair _ b ExprEmptyList)))
   | a == b = lift Nothing
   | otherwise = return (iTest, a, b)
 runTest _ = throwE "expr was not a pair!!!"

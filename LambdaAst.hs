@@ -29,9 +29,9 @@ instance Show Ast where
 -- Lambda Expr, desugared ast, that we can do beta reduction on
 
 data Expr =
-  ExprArgRef Int |
+  ExprArgRef {argRef :: Int} |
   ExprEmptyList |
-  ExprPair Expr Expr |
-  ExprAbstraction Expr |
-  ExprApplication Expr Expr
+  ExprPair {isPairFullyReduced::Bool, exprFst::Expr, exprSnd::Expr} |
+  ExprAbstraction {isAbsFullyReduced::Bool, absBody::Expr} |
+  ExprApplication {isAppFullyReduced::Bool, exprFn::Expr, exprArg::Expr}
   deriving(Show, Eq)

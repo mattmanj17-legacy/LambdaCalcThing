@@ -261,10 +261,8 @@
 		[(ack two zero) three]
 		[(ack two one) (succ four)]
 		[(ack two two) (add four three)]
-
 		[(ack two three) (mult three three)]
-
-		--[(ack two four) (add (add four four) three)]
+		[(ack two four) (add (add four four) three)]
 
 		--[(ack three zero) (succ four)]
 		--[(ack three one) (succ (mult four three))]
