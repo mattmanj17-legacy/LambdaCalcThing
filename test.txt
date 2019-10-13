@@ -263,5 +263,18 @@
 		[(ack two two) (add four three)]
 
 		[(ack two three) (mult three three)]
+
+		--[(ack two four) (add (add four four) three)]
+
+		--[(ack three zero) (succ four)]
+		--[(ack three one) (succ (mult four three))]
+		--[(ack three two) (add (pow (succ four) two) four)]
+		--[(ack three three) (succ (mult (mult (succ four) two) (add three three)))]
+		--[(ack three four) (mult (pow (succ four) two) (succ four))]
+
+		--[(ack four zero) (succ (mult four three))]
+		--[(ack four one)
+		--	(sub (pow (pow (pow (pow two two) two) two) two) three)
+		--]
 	]
 )
