@@ -28,6 +28,36 @@
 		[pow (fn a (fn b (fn c (fn d (b a c d)))))]
 
 		[sub (fn m (fn n (n pred m)))]
+
+		[true (fn [x y] x)]
+		[false (fn [x y] y)]
+		[and (fn [p q] (p q p))]
+		[ifthenelse (fn [p a b] (p a b))]
+		[iszero (fn n (n (fn x false) true))]
+		[fix 
+			(fn f 
+				(
+					(fn x (f (x x)))
+					(fn x (f (x x)))
+				)
+			)
+		]
+		[almostAck 
+			(fn [a m n]
+				(ifthenelse
+					(iszero m)
+					(succ n)
+					(ifthenelse
+						(iszero n)
+						(a (pred m) one)
+						(a (pred m) (a m (pred n)))
+					)
+				)
+			)
+		]
+		[ack
+			(fix almostAck)
+		]
 	]
 	[
 		-- succ
@@ -213,5 +243,25 @@
 			[(sub four two) two]
 			[(sub four three) one]
 			[(sub four four) zero]
+
+		-- ack
+
+		[(ack zero zero) one]
+		[(ack zero one) two]
+		[(ack zero two) three]
+		[(ack zero three) four]
+		[(ack zero four) (succ four)]
+
+		[(ack one zero) two]
+		[(ack one one) three]
+		[(ack one two) four]
+		[(ack one three) (succ four)]
+		[(ack one four) (add four two)]
+
+		[(ack two zero) three]
+		[(ack two one) (succ four)]
+		[(ack two two) (add four three)]
+
+		[(ack two three) (mult three three)]
 	]
 )
