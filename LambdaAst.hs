@@ -34,4 +34,11 @@ data Expr =
   ExprPair {isPairFullyReduced::Bool, exprFst::Expr, exprSnd::Expr} |
   ExprAbstraction {isAbsFullyReduced::Bool, absBody::Expr} |
   ExprApplication {isAppFullyReduced::Bool, exprFn::Expr, exprArg::Expr}
-  deriving(Show, Eq)
+  deriving(Eq)
+
+instance Show Expr where
+  show (ExprArgRef {argRef = ar}) = "#" ++ show ar
+  show ExprEmptyList = "[]"
+  show (ExprPair {isPairFullyReduced = ifr, exprFst = frst, exprSnd = scnd}) = (if ifr then "*" else "") ++ "<" ++ show frst ++ ", " ++ show scnd ++ ">"
+  show (ExprAbstraction {isAbsFullyReduced = ifr, absBody = body}) = (if ifr then "*" else "") ++ "(/ " ++ show body ++ ")"
+  show (ExprApplication {isAppFullyReduced = ifr, exprFn = fn, exprArg = arg}) = (if ifr then "*" else "") ++ "(" ++ show fn ++ " " ++ show arg ++ ")"
