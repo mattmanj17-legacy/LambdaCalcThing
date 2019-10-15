@@ -37,7 +37,7 @@
 		[fix 
 			(fn f 
 				(
-					(fn x (f (x x)))
+					(fn x (x x))
 					(fn x (f (x x)))
 				)
 			)

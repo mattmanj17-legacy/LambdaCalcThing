@@ -32,9 +32,13 @@ data Expr =
   ExprArgRef {argRef :: Int} |
   ExprEmptyList |
   ExprPair {isPairFullyReduced::Bool, exprFst::Expr, exprSnd::Expr} |
-  ExprAbstraction {isAbsFullyReduced::Bool, absBody::Expr} |
+  ExprAbstraction {isAbsFullyReduced::Bool, absBody::Expr, isLazy :: Bool} |
   ExprApplication {isAppFullyReduced::Bool, exprFn::Expr, exprArg::Expr}
   deriving(Eq)
+
+isAbstraction :: Expr -> Bool
+isAbstraction (ExprAbstraction {}) = True
+isAbstraction _ = False
 
 instance Show Expr where
   show (ExprArgRef {argRef = ar}) = "#" ++ show ar
