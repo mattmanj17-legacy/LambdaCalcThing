@@ -18,12 +18,22 @@ data AstId =
     }
   deriving(Eq)
 
+instance Show AstId where
+  show = getIdStr
+
 data AstPair = 
   AstPair 
     { getFstAst :: Ast
     , getSndAst :: Ast
     }
   deriving(Eq)
+
+instance Show AstPair where
+  show astPair =
+    "<" ++ show fstAst ++ ", " ++ show sndAst ++ ">"
+    where
+      fstAst = getFstAst astPair
+      sndAst = getSndAst astPair
 
 data AstApplication = 
   AstApplication 
@@ -32,12 +42,27 @@ data AstApplication =
     }
   deriving(Eq)
 
+instance Show AstApplication where
+  show astApp =
+    "(" ++ show fnAst ++ " " ++ show argAst ++ ")"
+    where
+      fnAst = getFnAst astApp
+      argAst = getArgAst astApp
+
 data AstNode =
   IdNode AstId |
   PairNode AstPair |
   EmptyListNode |
   ApplicationNode AstApplication
   deriving(Eq)
+
+instance Show AstNode where
+  show astNode =
+    case astNode of
+      IdNode astId -> show astId
+      EmptyListNode -> "[]"
+      PairNode astPair -> show astPair
+      ApplicationNode astApp -> show astApp
 
 data Ast =
   Ast
@@ -47,22 +72,7 @@ data Ast =
   deriving(Eq)
 
 instance Show Ast where
-  show ast =
-    case getAstNode ast of
-      IdNode astId -> 
-        getIdStr astId
-      EmptyListNode -> 
-        "[]"
-      PairNode astPair -> 
-        concat ["<", show fstAst, ", ", show sndAst, ">"]
-        where
-          fstAst = getFstAst astPair
-          sndAst = getSndAst astPair
-      ApplicationNode astApp ->
-        concat ["(", show fnAst, " ", show argAst, ")"]
-        where
-          fnAst = getFnAst astApp
-          argAst = getArgAst astApp
+  show = show . getAstNode
 
 mkAstIdAt :: String -> SourceInfo -> Ast
 mkAstIdAt idStr =
