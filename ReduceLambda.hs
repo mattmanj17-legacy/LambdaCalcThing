@@ -4,6 +4,7 @@
 module ReduceLambda where
 
 import LambdaAst
+import LambdaExpr
 import Control.Monad.Trans.Except
 import Data.Maybe
 
