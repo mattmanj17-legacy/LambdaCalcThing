@@ -37,13 +37,19 @@ parseId = do
   posStart <- getPosition
   str <- many1 letter
   posEnd <- getPosition
-  return (AstId posStart posEnd str)
+  let astId = AstId posStart posEnd str False
+  return astId
 
 listToPairs :: SourcePos -> SourcePos -> [Ast] -> Ast
-listToPairs sp ep [] = 
-  AstEmptyList sp ep
-listToPairs sp ep (a:rest) = 
-  (AstPair sp ep a (listToPairs (srcposAstEnd a) ep rest))
+listToPairs start end xss = 
+  case xss of
+    [] -> 
+      AstEmptyList start end False
+    x:xs -> 
+      AstPair start end x xsToPairs False
+      where
+        xEnd = getEnd x
+        xsToPairs = listToPairs xEnd end xs
 
 parseList :: SimpleParser Ast 
 parseList = do
@@ -68,10 +74,9 @@ parseApplication = do
   return (listToApps posStart posEnd terms)
 
 listToApps :: SourcePos -> SourcePos -> [Ast] -> Ast
-listToApps _ _ [] = undefined
-listToApps _ _ [a] = a
-listToApps sp ep [a, b] = 
-  (AstApplication sp ep a b)
-listToApps sp ep (a:b:rest) = 
-  listToApps sp ep 
-    ((AstApplication (srcposAstStart a) (srcposAstEnd b) a b):rest)
+listToApps start end list =
+  AstApplication start end foldedFn foldedArg False
+  where
+    folded = foldl1 mkAstApp list
+    foldedFn = getFnAst folded
+    foldedArg = getArgAst folded

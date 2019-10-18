@@ -23,8 +23,8 @@ errorStrAt ast strMsg = do
   let viewedLinesColored = ((mapFirst (insert (startChar - 1) "\x1b[31m")) . (mapLast (insert (endChar - 1) "\x1b[0m"))) viewedLines
   return $ unlines $ posStr:viewedLinesColored
   where
-    start = srcposAstStart ast
-    end = srcposAstEnd ast
+    start = getStart ast
+    end = getEnd ast
 
     startLine = (sourceLine start)
     startChar = (sourceColumn start)
@@ -73,14 +73,23 @@ replaceVars ::
   [(String, Int)] -> 
   Ast -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVars reps expr = do
-  lift $ tell ["replaceVars in " ++ show expr]
-  case expr of
-    (AstId {strAstId = idStr}) -> replaceVarsInId reps expr idStr
-    (AstPair {astFst = frst, astSnd = scnd}) -> replaceVarsInPair reps (frst, scnd)
-    (AstApplication {astFn = fn, astArg = arg}) -> replaceVarsInApp reps (fn, arg)
+replaceVars reps ast = do
+  lift $ tell ["replaceVars in " ++ show ast]
+  case ast of
+    AstId {} -> 
+      replaceVarsInId reps ast idStr
+    AstPair {} -> 
+      replaceVarsInPair reps (fstAst, sndAst)
+    AstApplication {} -> 
+      replaceVarsInApp reps (fnAst, argAst)
     AstEmptyList {} -> do
-      return ExprEmptyList
+      return (ExprEmptyList True False)
+  where
+    idStr = getIdStr ast
+    fstAst = getFstAst ast
+    sndAst = getSndAst ast
+    fnAst = getFnAst ast
+    argAst = getArgAst ast
 
 replaceVarsInId :: 
   (Monad m) => 
@@ -91,7 +100,7 @@ replaceVarsInId ::
 replaceVarsInId reps astParent str = do
   lift $ tell ["replaceVarsInId " ++ show reps ++ " " ++ show astParent ++ " " ++ show str]
   errStr <- lift $ lift $ errorStrAt astParent ("unrecognized id " ++ str)
-  maybe (throwE errStr) (return . ExprArgRef) (lookup str reps)
+  maybe (throwE errStr) (return . (\x -> ExprArgRef True x False)) (lookup str reps)
 
 replaceVarsInPair :: 
   (Monad m) => 
@@ -102,7 +111,7 @@ replaceVarsInPair reps (astFirst, astSecond) = do
   lift $ tell ["replaceVarsInPair " ++ show reps ++ " " ++ show astFirst ++ " " ++ show astSecond]
   newFrst <- replaceVars reps astFirst
   newScnd <- replaceVars reps astSecond
-  return $ ExprPair False newFrst newScnd
+  return $ ExprPair False newFrst newScnd False
 
 replaceVarsInApp :: 
   (Monad m) =>
@@ -111,14 +120,19 @@ replaceVarsInApp ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInApp reps (replaceIn, replaceWith) = do
   lift $ tell ["replaceVarsInApp " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith]
-  case replaceIn of
-    (AstApplication {astFn = fn@(AstId {strAstId = "fn"}), astArg = arg}) ->
-      replaceVarsInAppFn reps fn (arg, replaceWith)
-    (AstApplication {astFn = (AstId {strAstId = "letin"}), astArg = arg}) -> do
-      transformed <- transformLetin arg replaceWith
-      replaceVars reps transformed
-    _ ->
-      replaceVarsInAppDefault reps (replaceIn, replaceWith)
+  if replaceInMatchesBuiltin "fn" then
+    replaceVarsInAppFn reps replaceInFn (replaceInArg, replaceWith)
+  else if replaceInMatchesBuiltin "letin" then do
+    transformed <- transformLetin replaceInArg replaceWith
+    replaceVars reps transformed
+  else
+    replaceVarsInAppDefault reps (replaceIn, replaceWith)
+  where
+    replaceInFn = getFnAst replaceIn
+    replaceInArg = getArgAst replaceIn
+    replaceInFnIdStr = getIdStr replaceInFn
+    replaceInMatchesBuiltin strBuiltin =
+      isAstApp replaceIn && isAstId replaceInFn && replaceInFnIdStr == strBuiltin
 
 transformLetin ::
   (Monad m) => 
@@ -133,8 +147,8 @@ transformLetin defs body = do
       throwE errStr
     AstEmptyList {} ->
       return body
-    AstPair {astFst = frst, astSnd = scnd} ->
-      transformLetinPairDefs frst scnd body
+    AstPair {} ->
+      transformLetinPairDefs (getFstAst defs) (getSndAst defs) body
     AstApplication {} -> do
       errStr <- lift $ lift $ errorStrAt defs "letin does not expect an application as its first argument"
       throwE errStr
@@ -154,8 +168,8 @@ transformLetinPairDefs defsFrst defsScnd body = do
     AstEmptyList {} -> do
       errStr <- lift $ lift $ errorStrAt defsFrst "unexpected empty list in defs list for letin"
       throwE errStr
-    AstPair {astFst = frstDefId, astSnd = frstDefValue} ->
-      transformLetinPairDef frstDefId frstDefValue defsScnd body
+    AstPair {} ->
+      transformLetinPairDef (getFstAst defsFrst) (getSndAst defsFrst) defsScnd body
     AstApplication {} -> do
       errStr <- lift $ lift $ errorStrAt defsFrst "unexpected application in defs list for letin"
       throwE errStr
@@ -178,7 +192,7 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
         AstEmptyList {} -> do
           errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected empty list in def for letin : expected pair"
           throwE errStr
-        AstPair {astFst = valFrst, astSnd = valScnd} ->
+        AstPair {} ->
           case valScnd of
             AstEmptyList {} -> do
               transformed <- transformLetin defsScnd body
@@ -187,9 +201,10 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
                   (mkAstApp 
                     (mkAstApp 
                       (AstId 
-                        (srcposAstStart frstDefId) 
-                        (srcposAstStart frstDefId) 
+                        (getStart frstDefId) 
+                        (getStart frstDefId) 
                         "fn"
+                        False
                       ) 
                       frstDefId
                     ) 
@@ -199,6 +214,9 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
             _ -> do
               errStr <- lift $ lift $ errorStrAt valScnd "unexpected value in def for letin : expected empty list"
               throwE errStr
+          where
+            valFrst = getFstAst frstDefValue
+            valScnd = getSndAst frstDefValue
         AstApplication {} -> do
           errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected application in def for letin : expected pair"
           throwE errStr
@@ -221,11 +239,16 @@ replaceVarsInAppFn ::
 replaceVarsInAppFn reps fn (params, body) = do
   lift $ tell ["replaceVarsInAppFn " ++ show reps ++ " " ++ show params ++ " " ++ show body]
   case params of
-    (AstId {strAstId = idStr}) ->
+    AstId {} ->
       replaceVarsInAbsIdParam reps params idStr body
-    (AstPair {astFst = frst, astSnd = scnd}) ->
+      where
+        idStr = getIdStr params
+    AstPair {} ->
       replaceVarsInAppFnParamsPair reps fn (frst, scnd, body)
-    (AstEmptyList {}) -> do
+      where
+        frst = getFstAst params
+        scnd = getSndAst params
+    AstEmptyList {} -> do
       errStr <- lift $ lift $ errorStrAt params "empty params list for fn"
       throwE errStr
     _ -> do
@@ -241,12 +264,14 @@ replaceVarsInAppFnParamsPair ::
 replaceVarsInAppFnParamsPair reps fn (paramsFrst, paramsScnd, body) = do
   lift $ tell ["replaceVarsInAppFnParamsPair " ++ show reps ++ " " ++ show paramsFrst ++ " " ++ show paramsScnd ++ " " ++ show body]
   case paramsFrst of
-    (AstId {strAstId = idStr}) ->
+    AstId {} ->
       case paramsScnd of
         AstEmptyList {} ->
           replaceVarsInAbsIdParam reps paramsFrst idStr body
         _ -> 
           replaceVarsInAbsIdParam reps paramsFrst idStr (mkAstApp (mkAstApp fn paramsScnd) body)
+      where
+        idStr = getIdStr paramsFrst
     _ -> do
       errStr <- lift $ lift $ errorStrAt paramsFrst "non id in params list for fn"
       throwE errStr 
@@ -260,7 +285,7 @@ replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
   lift $ tell ["replaceVarsInAppDefault " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith]
   fnReplaced <- replaceVars reps replaceIn
   argReplaced <- replaceVars reps replaceWith
-  return $ ExprApplication False fnReplaced argReplaced
+  return $ ExprApplication False fnReplaced argReplaced False
 
 replaceVarsInAbsIdParam :: 
   (Monad m) => 
@@ -277,61 +302,54 @@ replaceVarsInAbsIdParam reps astId str body = do
   else do
     let newreps = (str, 1):(incReps reps)
     newBody <- replaceVars newreps body
-    return (ExprAbstraction False newBody True)
+    return (ExprAbstraction False newBody True False)
 
 -- REDUX
 
-isFullyReduced :: Expr -> Bool
-isFullyReduced expr =
-  case expr of
-    ExprArgRef {} -> True
-    ExprEmptyList {} -> True
-    ExprPair {isPairFullyReduced = reduced} -> reduced
-    ExprAbstraction {isAbsFullyReduced = reduced} -> reduced
-    ExprApplication {isAppFullyReduced = reduced} -> reduced
-
 lambdaBetaReducedOneStep :: Expr -> Expr
-lambdaBetaReducedOneStep ar@(ExprArgRef _) =
-  ar
-
-lambdaBetaReducedOneStep (ExprPair _ frst' scnd') =
-  if isFullyReduced frst' then
-    (ExprPair (isFullyReduced newScnd) frst' newScnd)
-  else
-    (ExprPair False newFrst scnd')
-  where
-    newFrst = lambdaBetaReducedOneStep frst'
-    newScnd = lambdaBetaReducedOneStep scnd'
-
-lambdaBetaReducedOneStep (ExprAbstraction _ val lazy) =
-  if isFullyReduced val then
-    ExprAbstraction True val lazy
-  else
-    ExprAbstraction False (lambdaBetaReducedOneStep val) lazy
-
-lambdaBetaReducedOneStep app@(ExprApplication {}) =
-  if isAbstraction func && (funcIsLazy || funcAndArgReduced) then
-    lambdaAppliedTo arg funcBody
-  else if funcAndArgReduced then
-    (ExprApplication True func arg)
-  else if isFullyReduced func then
-    (ExprApplication False func (lambdaBetaReducedOneStep arg))
-  else
-    (ExprApplication False (lambdaBetaReducedOneStep func) arg)
-  where
-    func = exprFn app
-    arg = exprArg app
-    funcBody = absBody func
-    funcAndArgReduced = isFullyReduced func && isFullyReduced arg
-    funcIsLazy = isLazy func
-
-lambdaBetaReducedOneStep ExprEmptyList =
-  ExprEmptyList
-
+lambdaBetaReducedOneStep expr =
+  case expr of
+    ExprArgRef {} ->
+      expr
+    ExprPair {} ->
+      if getIsFullyReduced frst' then
+        (ExprPair (getIsFullyReduced newScnd) frst' newScnd False)
+      else
+        (ExprPair False newFrst scnd' False)
+      where
+        frst' = getFstExpr expr
+        scnd' = getSndExpr expr
+        newFrst = lambdaBetaReducedOneStep frst'
+        newScnd = lambdaBetaReducedOneStep scnd'
+    ExprAbstraction {} ->
+      if getIsFullyReduced val then
+        ExprAbstraction True val lazy False
+      else
+        ExprAbstraction False (lambdaBetaReducedOneStep val) lazy False
+      where
+        val = getBody expr
+        lazy = getIsLazy expr
+    ExprApplication {} ->
+      if isExprAbstraction func && (funcIsLazy || funcAndArgReduced) then
+        lambdaAppliedTo arg funcBody
+      else if funcAndArgReduced then
+        (ExprApplication True func arg False)
+      else if getIsFullyReduced func then
+        (ExprApplication False func (lambdaBetaReducedOneStep arg) False)
+      else
+        (ExprApplication False (lambdaBetaReducedOneStep func) arg False)
+      where
+        func = getFnExpr expr
+        arg = getArgExpr expr
+        funcBody = getBody func
+        funcAndArgReduced = getIsFullyReduced func && getIsFullyReduced arg
+        funcIsLazy = getIsLazy func
+    ExprEmptyList {} ->
+      expr
 
 lambdaBetaReducedFull :: Expr -> Expr
 lambdaBetaReducedFull term = 
-  if isFullyReduced term then
+  if getIsFullyReduced term then
     term
   else
     lambdaBetaReducedFull reducedOnce
@@ -344,50 +362,65 @@ lambdaAppliedTo =
 
 
 lambdaArgRefReplacedWithLambda :: Int -> Expr -> Expr -> Expr
-lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprArgRef ar) = 
-  if argRefReplace == ar then 
-    lambdaIncrementedArgRefsGreaterThanOrEqual 1 ar arg'
-  else if argRefReplace < ar then
-    (ExprArgRef (ar-1))
-  else
-    (ExprArgRef ar)
-
-lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprPair _ frst' scnd') = 
-  (ExprPair False frstReplaced scndReplaced)
-  where
-    frstReplaced = lambdaArgRefReplacedWithLambda argRefReplace arg' frst'
-    scndReplaced = lambdaArgRefReplacedWithLambda argRefReplace arg' scnd'
-
-lambdaArgRefReplacedWithLambda argRefReplace arg' (ExprAbstraction _ body lazy) = 
-  ExprAbstraction False (lambdaArgRefReplacedWithLambda (argRefReplace+1) arg' body) lazy
-
-lambdaArgRefReplacedWithLambda argRefReplace argReplace (ExprApplication _ func arg') = 
-  (ExprApplication False funcReplaced argReplaced)
-  where
-    funcReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace func
-    argReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace arg'
-
-lambdaArgRefReplacedWithLambda _ _ ExprEmptyList = 
-  ExprEmptyList
-  
+lambdaArgRefReplacedWithLambda argRefReplace argReplace expr =
+  case expr of
+    ExprArgRef {} ->
+      if argRefReplace == ar then 
+        lambdaIncrementedArgRefsGreaterThanOrEqual 1 ar argReplace
+      else if argRefReplace < ar then
+        (ExprArgRef True (ar-1) False)
+      else
+        (ExprArgRef True ar False)
+      where
+        ar = getArgRef expr
+    ExprPair {} ->
+      (ExprPair False frstReplaced scndReplaced False)
+      where
+        frst' = getFstExpr expr
+        scnd' = getSndExpr expr
+        frstReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace frst'
+        scndReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace scnd'
+    ExprAbstraction {} ->
+      ExprAbstraction False (lambdaArgRefReplacedWithLambda (argRefReplace+1) argReplace body) lazy False
+      where
+        body = getBody expr
+        lazy = getIsLazy expr
+    ExprApplication {} ->
+      ExprApplication False funcReplaced argReplaced True
+      where
+        func = getFnExpr expr
+        arg' = getArgExpr expr
+        funcReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace func
+        argReplaced = lambdaArgRefReplacedWithLambda argRefReplace argReplace arg'
+    ExprEmptyList {} ->
+      expr
 
 lambdaIncrementedArgRefsGreaterThanOrEqual :: Int -> Int -> Expr -> Expr
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing lar@(ExprArgRef ar)
-  | ar < argRefPatchMin = lar
-  | otherwise = (ExprArgRef (ar + argRefReplacing - 1))
-
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprPair _ frst' scnd') =
-  (ExprPair False (incElem frst') (incElem scnd'))
-  where
-    incElem = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
-
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprAbstraction _ body lazy) =
-  ExprAbstraction False (lambdaIncrementedArgRefsGreaterThanOrEqual (argRefPatchMin + 1) argRefReplacing body) lazy
-
-lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing (ExprApplication _ func arg') =
-  ExprApplication False (incTerm func) (incTerm arg')
-  where
-    incTerm = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
-
-lambdaIncrementedArgRefsGreaterThanOrEqual _ _ ExprEmptyList =
-  ExprEmptyList
+lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing expr =
+  case expr of
+    ExprArgRef {} ->
+      if ar < argRefPatchMin then
+        expr
+      else
+        ExprArgRef True (ar + argRefReplacing - 1) False
+      where
+        ar = getArgRef expr
+    ExprPair {} ->
+      ExprPair False (incElem frst') (incElem scnd') False
+      where
+        frst' = getFstExpr expr
+        scnd' = getSndExpr expr
+        incElem = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
+    ExprAbstraction {} ->
+      ExprAbstraction False (lambdaIncrementedArgRefsGreaterThanOrEqual (argRefPatchMin + 1) argRefReplacing body) lazy False
+      where
+        body = getBody expr
+        lazy = getIsLazy expr
+    ExprApplication {} ->
+      ExprApplication False (incTerm func) (incTerm arg') False
+      where
+        func = getFnExpr expr
+        arg' = getArgExpr expr
+        incTerm = lambdaIncrementedArgRefsGreaterThanOrEqual argRefPatchMin argRefReplacing
+    ExprEmptyList {} ->
+      expr

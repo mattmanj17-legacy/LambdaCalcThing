@@ -8,41 +8,120 @@ import Text.Parsec.Pos
 -- Lambda ast, the "sweet" version we parse in
 
 data Ast =
-  AstId { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos, strAstId :: String} |
-  AstEmptyList { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos } |
-  AstPair { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos, astFst :: Ast, astSnd :: Ast } |
-  AstApplication { srcposAstStart :: SourcePos, srcposAstEnd :: SourcePos, astFn :: Ast, astArg :: Ast }
+  AstId 
+    { getStart :: SourcePos
+    , getEnd :: SourcePos
+    , getIdStr :: String
+    , foo :: Bool
+    } |
+  AstEmptyList 
+    { getStart :: SourcePos
+    , getEnd :: SourcePos
+    , foo :: Bool 
+    } |
+  AstPair 
+    { getStart :: SourcePos
+    , getEnd :: SourcePos
+    , getFstAst :: Ast
+    , getSndAst :: Ast
+    , foo :: Bool 
+    } |
+  AstApplication 
+    { getStart :: SourcePos
+    , getEnd :: SourcePos
+    , getFnAst :: Ast
+    , getArgAst :: Ast
+    , foo :: Bool 
+    }
   deriving(Eq)
 
-mkAstPair :: Ast -> Ast -> Ast
-mkAstPair frst scnd = AstPair (srcposAstStart frst) (srcposAstEnd scnd) frst scnd
-
 mkAstApp :: Ast -> Ast -> Ast
-mkAstApp fn arg = AstApplication (srcposAstStart fn) (srcposAstEnd arg) fn arg
+mkAstApp fn arg = 
+  AstApplication start end fn arg False
+  where
+    start = getStart fn
+    end = getEnd arg
+
+isAstId :: Ast -> Bool
+isAstId AstId {} = True
+isAstId _ = False
+
+isAstApp :: Ast -> Bool
+isAstApp AstApplication {} = True
+isAstApp _ = False
 
 instance Show Ast where
-  show ast@(AstId {}) = strAstId ast
-  show (AstEmptyList {}) = "[]"
-  show ast@(AstPair {}) = "<" ++ show (astFst ast) ++ ", " ++ show (astSnd ast) ++ ">"
-  show ast@(AstApplication {}) = "(" ++ show (astFn ast) ++ " " ++ show (astArg ast) ++ ")"
+  show ast =
+    case ast of
+      AstId {} -> idStr
+      AstEmptyList {} -> "[]"
+      AstPair {} -> concat ["<", show fstAst, ", ", show sndAst, ">"]
+      AstApplication {} -> concat ["(", show fnAst, " ", show argAst, ")"]
+    where
+      idStr = getIdStr ast
+      fstAst = getFstAst ast
+      sndAst = getSndAst ast
+      fnAst = getFnAst ast
+      argAst = getArgAst ast
 
 -- Lambda Expr, desugared ast, that we can do beta reduction on
 
 data Expr =
-  ExprArgRef {argRef :: Int} |
-  ExprEmptyList |
-  ExprPair {isPairFullyReduced::Bool, exprFst::Expr, exprSnd::Expr} |
-  ExprAbstraction {isAbsFullyReduced::Bool, absBody::Expr, isLazy :: Bool} |
-  ExprApplication {isAppFullyReduced::Bool, exprFn::Expr, exprArg::Expr}
+  ExprArgRef 
+    { getIsFullyReduced::Bool
+    , getArgRef :: Int
+    , goo :: Bool
+    } |
+  ExprEmptyList 
+    { getIsFullyReduced::Bool
+    , goo :: Bool
+    } |
+  ExprPair 
+    { getIsFullyReduced::Bool
+    , getFstExpr::Expr
+    , getSndExpr::Expr
+    , goo :: Bool
+    } |
+  ExprAbstraction 
+    { getIsFullyReduced::Bool
+    , getBody::Expr
+    , getIsLazy :: Bool
+    , goo :: Bool
+    } |
+  ExprApplication 
+    { getIsFullyReduced::Bool
+    , getFnExpr::Expr
+    , getArgExpr::Expr
+    , goo :: Bool
+    }
   deriving(Eq)
 
-isAbstraction :: Expr -> Bool
-isAbstraction (ExprAbstraction {}) = True
-isAbstraction _ = False
+isExprAbstraction :: Expr -> Bool
+isExprAbstraction (ExprAbstraction {}) = True
+isExprAbstraction _ = False
+
+isExprPair :: Expr -> Bool
+isExprPair (ExprPair {}) = True
+isExprPair _ = False
+
+isExprEmptyList :: Expr -> Bool
+isExprEmptyList (ExprEmptyList {}) = True
+isExprEmptyList _ = False
 
 instance Show Expr where
-  show (ExprArgRef {argRef = ar}) = "#" ++ show ar
-  show ExprEmptyList = "[]"
-  show (ExprPair {isPairFullyReduced = ifr, exprFst = frst, exprSnd = scnd}) = (if ifr then "*" else "") ++ "<" ++ show frst ++ ", " ++ show scnd ++ ">"
-  show (ExprAbstraction {isAbsFullyReduced = ifr, absBody = body}) = (if ifr then "*" else "") ++ "(/ " ++ show body ++ ")"
-  show (ExprApplication {isAppFullyReduced = ifr, exprFn = fn, exprArg = arg}) = (if ifr then "*" else "") ++ "(" ++ show fn ++ " " ++ show arg ++ ")"
+  show expr =
+    case expr of
+      ExprArgRef {} -> "#" ++ show argRef
+      ExprEmptyList {} -> "[]"
+      ExprPair {} -> concat [strPrepend, "<", show fstExpr, ", ", show sndExpr, ">"]
+      ExprAbstraction {} -> concat [strPrepend, "(/ ", show body, ")"]
+      ExprApplication {} -> concat [strPrepend, "(", show fnExpr, " ", show argExpr, ")"]
+    where
+      argRef = getArgRef expr
+      isFullyReduced = getIsFullyReduced expr
+      strPrepend = if isFullyReduced then "*" else ""
+      fstExpr = getFstExpr expr
+      sndExpr = getSndExpr expr
+      body = getBody expr
+      fnExpr = getFnExpr expr
+      argExpr = getArgExpr expr

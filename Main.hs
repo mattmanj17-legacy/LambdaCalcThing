@@ -52,9 +52,18 @@ honkhonk x =
             show a
 
 flattenList :: Expr -> [Expr]
-flattenList (ExprPair _ frst' scnd') = frst':(flattenList scnd')
-flattenList ExprEmptyList = []
-flattenList expr = [expr]
+flattenList expr =
+  case expr of
+    ExprPair {} ->
+      frst':flattenedSnd
+      where
+        frst' = getFstExpr expr
+        scnd' = getSndExpr expr
+        flattenedSnd = flattenList scnd'
+    ExprEmptyList {} ->
+      []
+    _ ->
+      [expr]
 
 replaceTabs :: String -> String
 replaceTabs =  concatMap ((bool <$> (:[]) <*> (const "    ") <*> (=='\t')))
@@ -73,7 +82,19 @@ tests = do
     _ -> throwE "test.txt did not evaluate to a list!!!"
 
 runTest :: (Int, Expr) -> ExceptT String Maybe (Int, Expr, Expr)
-runTest (iTest, (ExprPair _ a (ExprPair _ b ExprEmptyList)))
-  | a == b = lift Nothing
-  | otherwise = return (iTest, a, b)
-runTest _ = throwE "expr was not a pair!!!"
+runTest (iTest, expr) =
+  if exprIsPair && sndIsPair && sndSndExprIsEmptyList then
+    if fstExpr == sndFstExpr then
+      lift Nothing
+    else
+      return (iTest, fstExpr, sndFstExpr)
+  else
+    throwE "expr was not a pair!!!"
+  where
+    exprIsPair = isExprPair expr
+    fstExpr = getFstExpr expr
+    sndExpr = getSndExpr expr
+    sndIsPair = isExprPair sndExpr
+    sndFstExpr = getFstExpr sndExpr
+    sndSndExpr = getSndExpr sndExpr
+    sndSndExprIsEmptyList = isExprEmptyList sndSndExpr
