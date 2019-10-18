@@ -5,61 +5,99 @@ module LambdaAst where
 
 import Text.Parsec.Pos
 
--- Lambda ast, the "sweet" version we parse in
-
-data Ast =
-  AstId 
-    { getStart :: SourcePos
-    , getEnd :: SourcePos
-    , getIdStr :: String
-    , foo :: Bool
-    } |
-  AstEmptyList 
-    { getStart :: SourcePos
-    , getEnd :: SourcePos
-    , foo :: Bool 
-    } |
-  AstPair 
-    { getStart :: SourcePos
-    , getEnd :: SourcePos
-    , getFstAst :: Ast
-    , getSndAst :: Ast
-    , foo :: Bool 
-    } |
-  AstApplication 
-    { getStart :: SourcePos
-    , getEnd :: SourcePos
-    , getFnAst :: Ast
-    , getArgAst :: Ast
-    , foo :: Bool 
+data SourceInfo =
+  SourceInfo
+    { getStartPos :: SourcePos
+    , getEndPos :: SourcePos
     }
   deriving(Eq)
 
-mkAstApp :: Ast -> Ast -> Ast
-mkAstApp fn arg = 
-  AstApplication start end fn arg False
-  where
-    start = getStart fn
-    end = getEnd arg
+data AstId = 
+  AstId
+    { getIdStr :: String
+    }
+  deriving(Eq)
 
-isAstId :: Ast -> Bool
-isAstId AstId {} = True
-isAstId _ = False
+data AstPair = 
+  AstPair 
+    { getFstAst :: Ast
+    , getSndAst :: Ast
+    }
+  deriving(Eq)
 
-isAstApp :: Ast -> Bool
-isAstApp AstApplication {} = True
-isAstApp _ = False
+data AstApplication = 
+  AstApplication 
+    { getFnAst :: Ast
+    , getArgAst :: Ast
+    }
+  deriving(Eq)
+
+data AstNode =
+  IdNode AstId |
+  PairNode AstPair |
+  EmptyListNode |
+  ApplicationNode AstApplication
+  deriving(Eq)
+
+data Ast =
+  Ast
+    { getAstNode :: AstNode
+    , getSrcInf :: SourceInfo
+    }
+  deriving(Eq)
 
 instance Show Ast where
   show ast =
-    case ast of
-      AstId {} -> idStr
-      AstEmptyList {} -> "[]"
-      AstPair {} -> concat ["<", show fstAst, ", ", show sndAst, ">"]
-      AstApplication {} -> concat ["(", show fnAst, " ", show argAst, ")"]
-    where
-      idStr = getIdStr ast
-      fstAst = getFstAst ast
-      sndAst = getSndAst ast
-      fnAst = getFnAst ast
-      argAst = getArgAst ast
+    case getAstNode ast of
+      IdNode astId -> 
+        getIdStr astId
+      EmptyListNode -> 
+        "[]"
+      PairNode astPair -> 
+        concat ["<", show fstAst, ", ", show sndAst, ">"]
+        where
+          fstAst = getFstAst astPair
+          sndAst = getSndAst astPair
+      ApplicationNode astApp ->
+        concat ["(", show fnAst, " ", show argAst, ")"]
+        where
+          fnAst = getFnAst astApp
+          argAst = getArgAst astApp
+
+mkAstIdAt :: String -> SourceInfo -> Ast
+mkAstIdAt idStr =
+  Ast $ IdNode $ AstId idStr
+
+mkAstPair :: Ast -> Ast -> Ast
+mkAstPair astFst astSnd =
+  mkAstPairAt astFst astSnd srcInf
+  where
+    startPos = getAstStartPos astFst
+    endPos = getAstEndPos astSnd
+    srcInf = SourceInfo startPos endPos
+
+mkAstPairAt :: Ast -> Ast -> SourceInfo -> Ast
+mkAstPairAt astFst astSnd =
+  Ast $ PairNode $ AstPair astFst astSnd
+
+mkAstEmptyListAt :: SourceInfo -> Ast
+mkAstEmptyListAt = 
+  Ast $ EmptyListNode
+
+mkAstApp :: Ast -> Ast -> Ast
+mkAstApp astFn astArg =
+  mkAstAppAt astFn astArg srcInf
+  where
+    startPos = getAstStartPos astFn
+    endPos = getAstEndPos astArg
+    srcInf = SourceInfo startPos endPos
+
+mkAstAppAt :: Ast -> Ast -> SourceInfo -> Ast
+mkAstAppAt astFn astArg = 
+  Ast $ ApplicationNode $ AstApplication astFn astArg
+
+getAstEndPos :: Ast -> SourcePos
+getAstEndPos = getEndPos . getSrcInf
+
+getAstStartPos :: Ast -> SourcePos
+getAstStartPos = getStartPos . getSrcInf

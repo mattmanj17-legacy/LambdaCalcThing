@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Werror #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module ReduceLambda where
 
@@ -24,8 +25,8 @@ errorStrAt ast strMsg = do
   let viewedLinesColored = ((mapFirst (insert (startChar - 1) "\x1b[31m")) . (mapLast (insert (endChar - 1) "\x1b[0m"))) viewedLines
   return $ unlines $ posStr:viewedLinesColored
   where
-    start = getStart ast
-    end = getEnd ast
+    start = getAstStartPos ast
+    end = getAstEndPos ast
 
     startLine = (sourceLine start)
     startChar = (sourceColumn start)
@@ -76,21 +77,15 @@ replaceVars ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVars reps ast = do
   lift $ tell ["replaceVars in " ++ show ast]
-  case ast of
-    AstId {} -> 
-      replaceVarsInId reps ast idStr
-    AstPair {} -> 
-      replaceVarsInPair reps (fstAst, sndAst)
-    AstApplication {} -> 
-      replaceVarsInApp reps (fnAst, argAst)
-    AstEmptyList {} -> do
+  case getAstNode ast of
+    IdNode astId -> 
+      replaceVarsInId reps ast (getIdStr astId)
+    PairNode astPair -> 
+      replaceVarsInPair reps (getFstAst astPair, getSndAst astPair)
+    ApplicationNode astApp -> 
+      replaceVarsInApp reps (getFnAst astApp, getArgAst astApp)
+    EmptyListNode -> do
       return (ExprEmptyList True False)
-  where
-    idStr = getIdStr ast
-    fstAst = getFstAst ast
-    sndAst = getSndAst ast
-    fnAst = getFnAst ast
-    argAst = getArgAst ast
 
 replaceVarsInId :: 
   (Monad m) => 
@@ -121,19 +116,19 @@ replaceVarsInApp ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInApp reps (replaceIn, replaceWith) = do
   lift $ tell ["replaceVarsInApp " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith]
-  if replaceInMatchesBuiltin "fn" then
-    replaceVarsInAppFn reps replaceInFn (replaceInArg, replaceWith)
-  else if replaceInMatchesBuiltin "letin" then do
-    transformed <- transformLetin replaceInArg replaceWith
-    replaceVars reps transformed
-  else
-    replaceVarsInAppDefault reps (replaceIn, replaceWith)
-  where
-    replaceInFn = getFnAst replaceIn
-    replaceInArg = getArgAst replaceIn
-    replaceInFnIdStr = getIdStr replaceInFn
-    replaceInMatchesBuiltin strBuiltin =
-      isAstApp replaceIn && isAstId replaceInFn && replaceInFnIdStr == strBuiltin
+  let defaultReplacement = replaceVarsInAppDefault reps (replaceIn, replaceWith)
+  if| (ApplicationNode astApp) <- getAstNode replaceIn
+    , (IdNode astId) <- getAstNode $ getFnAst astApp ->
+      case getIdStr astId of
+        "fn" -> 
+          replaceVarsInAppFn reps (getFnAst astApp) ((getArgAst astApp), replaceWith)
+        "letin" -> do
+          transformed <- transformLetin (getArgAst astApp) replaceWith
+          replaceVars reps transformed
+        _ ->
+          defaultReplacement
+    | otherwise -> 
+      defaultReplacement
 
 transformLetin ::
   (Monad m) => 
@@ -142,15 +137,15 @@ transformLetin ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Ast
 transformLetin defs body = do
   lift $ tell ["transformLetin " ++ show defs ++ " " ++ show body]
-  case defs of
-    AstId {} -> do
+  case getAstNode defs of
+    IdNode {} -> do
       errStr <- lift $ lift $ errorStrAt defs "letin does not expect an id as its first argument"
       throwE errStr
-    AstEmptyList {} ->
+    EmptyListNode {} ->
       return body
-    AstPair {} ->
-      transformLetinPairDefs (getFstAst defs) (getSndAst defs) body
-    AstApplication {} -> do
+    PairNode astPair ->
+      transformLetinPairDefs (getFstAst astPair) (getSndAst astPair) body
+    ApplicationNode {} -> do
       errStr <- lift $ lift $ errorStrAt defs "letin does not expect an application as its first argument"
       throwE errStr
 
@@ -162,16 +157,16 @@ transformLetinPairDefs ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Ast
 transformLetinPairDefs defsFrst defsScnd body = do
   lift $ tell ["transformLetinPairDefs " ++ show defsFrst ++ " " ++ show defsScnd ++ " " ++ show body]
-  case defsFrst of
-    AstId {} -> do
+  case getAstNode defsFrst of
+    IdNode {} -> do
       errStr <- lift $ lift $ errorStrAt defsFrst "unexpected id in defs list for letin"
       throwE errStr
-    AstEmptyList {} -> do
+    EmptyListNode -> do
       errStr <- lift $ lift $ errorStrAt defsFrst "unexpected empty list in defs list for letin"
       throwE errStr
-    AstPair {} ->
-      transformLetinPairDef (getFstAst defsFrst) (getSndAst defsFrst) defsScnd body
-    AstApplication {} -> do
+    PairNode astPair ->
+      transformLetinPairDef (getFstAst astPair) (getSndAst astPair) defsScnd body
+    ApplicationNode {} -> do
       errStr <- lift $ lift $ errorStrAt defsFrst "unexpected application in defs list for letin"
       throwE errStr
 
@@ -184,28 +179,29 @@ transformLetinPairDef ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Ast
 transformLetinPairDef frstDefId frstDefValue defsScnd body = do
   lift $ tell ["transformLetinPairDef " ++ show frstDefId ++ " " ++ show frstDefValue ++ " " ++ show defsScnd ++ " " ++ show body]
-  case frstDefId of
-    AstId {} -> do
-      case frstDefValue of
-        AstId {} -> do
+  case getAstNode frstDefId of
+    IdNode {} -> do
+      case getAstNode frstDefValue of
+        IdNode {} -> do
           errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected id in def for letin : expected pair"
           throwE errStr
-        AstEmptyList {} -> do
+        EmptyListNode -> do
           errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected empty list in def for letin : expected pair"
           throwE errStr
-        AstPair {} ->
-          case valScnd of
-            AstEmptyList {} -> do
+        PairNode astPair ->
+          case getAstNode valScnd of
+            EmptyListNode -> do
               transformed <- transformLetin defsScnd body
               return $
                 mkAstApp
                   (mkAstApp 
                     (mkAstApp 
-                      (AstId 
-                        (getStart frstDefId) 
-                        (getStart frstDefId) 
+                      (mkAstIdAt 
                         "fn"
-                        False
+                        (SourceInfo
+                          (getAstStartPos frstDefId) 
+                          (getAstStartPos frstDefId)
+                        )
                       ) 
                       frstDefId
                     ) 
@@ -216,18 +212,18 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
               errStr <- lift $ lift $ errorStrAt valScnd "unexpected value in def for letin : expected empty list"
               throwE errStr
           where
-            valFrst = getFstAst frstDefValue
-            valScnd = getSndAst frstDefValue
-        AstApplication {} -> do
+            valFrst = getFstAst astPair
+            valScnd = getSndAst astPair
+        ApplicationNode {} -> do
           errStr <- lift $ lift $ errorStrAt frstDefValue "unexpected application in def for letin : expected pair"
           throwE errStr
-    AstEmptyList {} -> do
+    EmptyListNode -> do
       errStr <- lift $ lift $ errorStrAt frstDefId "unexpected empty list in def for letin : expected id"
       throwE errStr
-    AstPair {} -> do
+    PairNode {} -> do
       errStr <- lift $ lift $ errorStrAt frstDefId "unexpected pair in def for letin : expected id"
       throwE errStr
-    AstApplication {} -> do
+    ApplicationNode {} -> do
       errStr <- lift $ lift $ errorStrAt frstDefId "unexpected application in def for letin : expected id"
       throwE errStr
 
@@ -239,17 +235,17 @@ replaceVarsInAppFn ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAppFn reps fn (params, body) = do
   lift $ tell ["replaceVarsInAppFn " ++ show reps ++ " " ++ show params ++ " " ++ show body]
-  case params of
-    AstId {} ->
+  case getAstNode params of
+    IdNode astId ->
       replaceVarsInAbsIdParam reps params idStr body
       where
-        idStr = getIdStr params
-    AstPair {} ->
+        idStr = getIdStr astId
+    PairNode astPair ->
       replaceVarsInAppFnParamsPair reps fn (frst, scnd, body)
       where
-        frst = getFstAst params
-        scnd = getSndAst params
-    AstEmptyList {} -> do
+        frst = getFstAst astPair
+        scnd = getSndAst astPair
+    EmptyListNode -> do
       errStr <- lift $ lift $ errorStrAt params "empty params list for fn"
       throwE errStr
     _ -> do
@@ -264,15 +260,15 @@ replaceVarsInAppFnParamsPair ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAppFnParamsPair reps fn (paramsFrst, paramsScnd, body) = do
   lift $ tell ["replaceVarsInAppFnParamsPair " ++ show reps ++ " " ++ show paramsFrst ++ " " ++ show paramsScnd ++ " " ++ show body]
-  case paramsFrst of
-    AstId {} ->
-      case paramsScnd of
-        AstEmptyList {} ->
+  case getAstNode paramsFrst of
+    IdNode astId ->
+      case getAstNode paramsScnd of
+        EmptyListNode ->
           replaceVarsInAbsIdParam reps paramsFrst idStr body
         _ -> 
           replaceVarsInAbsIdParam reps paramsFrst idStr (mkAstApp (mkAstApp fn paramsScnd) body)
       where
-        idStr = getIdStr paramsFrst
+        idStr = getIdStr astId
     _ -> do
       errStr <- lift $ lift $ errorStrAt paramsFrst "non id in params list for fn"
       throwE errStr 

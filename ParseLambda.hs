@@ -37,19 +37,16 @@ parseId = do
   posStart <- getPosition
   str <- many1 letter
   posEnd <- getPosition
-  let astId = AstId posStart posEnd str False
+  let astId = mkAstIdAt str $ SourceInfo posStart posEnd
   return astId
 
-listToPairs :: SourcePos -> SourcePos -> [Ast] -> Ast
-listToPairs start end xss = 
-  case xss of
-    [] -> 
-      AstEmptyList start end False
-    x:xs -> 
-      AstPair start end x xsToPairs False
-      where
-        xEnd = getEnd x
-        xsToPairs = listToPairs xEnd end xs
+listToPairs :: SourceInfo -> [Ast] -> Ast
+listToPairs srcInf list =
+  mkAstPairAt foldedFst foldedSnd srcInf
+  where
+    (PairNode folded) = getAstNode $ foldr mkAstPair (mkAstEmptyListAt srcInf) list
+    foldedFst = getFstAst folded
+    foldedSnd = getSndAst folded
 
 parseList :: SimpleParser Ast 
 parseList = do
@@ -60,7 +57,8 @@ parseList = do
   _ <- parseIgnore
   _ <- char ']'
   posEnd <- getPosition
-  return (listToPairs posStart posEnd elems)
+  let srcInf = SourceInfo posStart posEnd
+  return (listToPairs srcInf elems)
 
 parseApplication :: SimpleParser Ast
 parseApplication = do
@@ -71,12 +69,13 @@ parseApplication = do
   _ <- parseIgnore
   _ <- char ')'
   posEnd <- getPosition
-  return (listToApps posStart posEnd terms)
+  let srcInf = SourceInfo posStart posEnd
+  return (listToApps srcInf terms)
 
-listToApps :: SourcePos -> SourcePos -> [Ast] -> Ast
-listToApps start end list =
-  AstApplication start end foldedFn foldedArg False
+listToApps :: SourceInfo -> [Ast] -> Ast
+listToApps srcInf list =
+  mkAstAppAt foldedFn foldedArg srcInf
   where
-    folded = foldl1 mkAstApp list
+    (ApplicationNode folded) = getAstNode $ foldl1 mkAstApp list
     foldedFn = getFnAst folded
     foldedArg = getArgAst folded
