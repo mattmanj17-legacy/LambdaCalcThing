@@ -12,6 +12,17 @@ data SourceInfo =
     }
   deriving(Eq)
 
+instance Show SourceInfo where
+  show srcInf = 
+    "<" ++ startLine ++ ":" ++ startChar ++ "-" ++ endLine ++ ":" ++ endChar ++ ">"
+    where
+      startPos = getStartPos srcInf
+      startLine = show $ sourceLine startPos
+      startChar = show $ sourceColumn startPos
+      endPos = getEndPos srcInf
+      endLine = show $ sourceLine endPos
+      endChar = show $ sourceColumn endPos
+
 data AstIdR = 
   AstIdR
     { getIdStr :: String

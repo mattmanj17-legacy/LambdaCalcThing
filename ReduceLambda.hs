@@ -9,55 +9,10 @@ import LambdaExpr
 import Control.Monad.Trans.Except
 import Data.Maybe
 
-import Text.Parsec.Pos
-
 import Control.Monad.Writer
 import Control.Monad.Reader
 
-errorStrAt :: 
-  (Monad m) => 
-  AstR -> 
-  String -> 
-  ReaderT [String] m String
-errorStrAt ast strMsg = do
-  fileLines <- ask
-  let viewedLines = take (endLine - startLine + 1) $ (drop (startLine - 1)) fileLines
-  let viewedLinesColored = ((mapFirst (insert (startChar - 1) "\x1b[31m")) . (mapLast (insert (endChar - 1) "\x1b[0m"))) viewedLines
-  return $ unlines $ posStr:viewedLinesColored
-  where
-    start = getAstStartPos ast
-    end = getAstEndPos ast
-
-    startLine = (sourceLine start)
-    startChar = (sourceColumn start)
-    endLine = (sourceLine end)
-    endChar = (sourceColumn end)
-
-    posStr = 
-      concat
-        [ "<"
-        , (show startLine)
-        , ":"
-        , (show startChar)
-        , "-"
-        , (show endLine)
-        , ":"
-        , (show endChar)
-        , "> "
-        , strMsg
-        ]
-
-    mapFirst _ [] = []
-    mapFirst fn (x:xs) = (fn x):xs
-
-    mapLast _ [] = []
-    mapLast fn [x] = [fn x]
-    mapLast fn (x:xs) = x:(mapLast fn xs)
-
-    insert n xsInsert xsModify = 
-      xsStart ++ xsInsert ++ xsEnd
-      where
-        (xsStart, xsEnd) = splitAt n xsModify
+import ShowErr
 
 anonLambda :: 
   (Monad m) => 
