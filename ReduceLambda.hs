@@ -193,21 +193,22 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
             AstEmptyList -> do
               transformed <- transformLetin defsScnd body
               return $
-                mkAstApp
-                  (mkAstApp 
-                    (mkAstApp 
-                      (mkAstIdAt 
-                        "fn"
-                        (SourceInfo
-                          (getAstStartPos frstDefId) 
-                          (getAstStartPos frstDefId)
-                        )
-                      ) 
-                      frstDefId
-                    ) 
-                    transformed
+                appifyAstList
+                  (SourceInfo
+                    (getAstStartPos frstDefId)
+                    (getAstEndPos valFrst)
                   )
-                  valFrst
+                  (mkAstIdAt 
+                    "fn"
+                    (SourceInfo
+                      (getAstStartPos frstDefId) 
+                      (getAstStartPos frstDefId)
+                    )
+                  )
+                  [ frstDefId
+                  , transformed
+                  , valFrst
+                  ]
             _ -> do
               errStr <- lift $ lift $ errorStrAt valScnd "unexpected value in def for letin : expected empty list"
               throwE errStr
