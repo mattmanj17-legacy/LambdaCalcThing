@@ -12,73 +12,73 @@ data SourceInfo =
     }
   deriving(Eq)
 
-data AstId = 
-  AstId
+data AstIdR = 
+  AstIdR
     { getIdStr :: String
     }
   deriving(Eq)
 
-instance Show AstId where
+instance Show AstIdR where
   show = getIdStr
 
-data AstPair = 
-  AstPair 
-    { getFstAst :: Ast
-    , getSndAst :: Ast
+data AstPairR = 
+  AstPairR 
+    { getFstAst :: AstR
+    , getSndAst :: AstR
     }
   deriving(Eq)
 
-instance Show AstPair where
+instance Show AstPairR where
   show astPair =
     "<" ++ show fstAst ++ ", " ++ show sndAst ++ ">"
     where
       fstAst = getFstAst astPair
       sndAst = getSndAst astPair
 
-data AstApplication = 
-  AstApplication 
-    { getFnAst :: Ast
-    , getArgAst :: Ast
+data AstApplicationR = 
+  AstApplicationR 
+    { getFnAst :: AstR
+    , getArgAst :: AstR
     }
   deriving(Eq)
 
-instance Show AstApplication where
+instance Show AstApplicationR where
   show astApp =
     "(" ++ show fnAst ++ " " ++ show argAst ++ ")"
     where
       fnAst = getFnAst astApp
       argAst = getArgAst astApp
 
-data AstNode =
-  IdNode AstId |
-  PairNode AstPair |
-  EmptyListNode |
-  ApplicationNode AstApplication
+data Ast =
+  AstId AstIdR |
+  AstPair AstPairR |
+  AstEmptyList |
+  AstApplication AstApplicationR
   deriving(Eq)
 
-instance Show AstNode where
+instance Show Ast where
   show astNode =
     case astNode of
-      IdNode astId -> show astId
-      EmptyListNode -> "[]"
-      PairNode astPair -> show astPair
-      ApplicationNode astApp -> show astApp
+      AstId astId -> show astId
+      AstEmptyList -> "[]"
+      AstPair astPair -> show astPair
+      AstApplication astApp -> show astApp
 
-data Ast =
-  Ast
-    { getAstNode :: AstNode
+data AstR =
+  AstR
+    { getAst :: Ast
     , getSrcInf :: SourceInfo
     }
   deriving(Eq)
 
-instance Show Ast where
-  show = show . getAstNode
+instance Show AstR where
+  show = show . getAst
 
-mkAstIdAt :: String -> SourceInfo -> Ast
+mkAstIdAt :: String -> SourceInfo -> AstR
 mkAstIdAt idStr =
-  Ast $ IdNode $ AstId idStr
+  AstR $ AstId $ AstIdR idStr
 
-mkAstPair :: Ast -> Ast -> Ast
+mkAstPair :: AstR -> AstR -> AstR
 mkAstPair astFst astSnd =
   mkAstPairAt astFst astSnd srcInf
   where
@@ -86,15 +86,15 @@ mkAstPair astFst astSnd =
     endPos = getAstEndPos astSnd
     srcInf = SourceInfo startPos endPos
 
-mkAstPairAt :: Ast -> Ast -> SourceInfo -> Ast
+mkAstPairAt :: AstR -> AstR -> SourceInfo -> AstR
 mkAstPairAt astFst astSnd =
-  Ast $ PairNode $ AstPair astFst astSnd
+  AstR $ AstPair $ AstPairR astFst astSnd
 
-mkAstEmptyListAt :: SourceInfo -> Ast
+mkAstEmptyListAt :: SourceInfo -> AstR
 mkAstEmptyListAt = 
-  Ast $ EmptyListNode
+  AstR $ AstEmptyList
 
-mkAstApp :: Ast -> Ast -> Ast
+mkAstApp :: AstR -> AstR -> AstR
 mkAstApp astFn astArg =
   mkAstAppAt astFn astArg srcInf
   where
@@ -102,12 +102,43 @@ mkAstApp astFn astArg =
     endPos = getAstEndPos astArg
     srcInf = SourceInfo startPos endPos
 
-mkAstAppAt :: Ast -> Ast -> SourceInfo -> Ast
+mkAstAppAt :: AstR -> AstR -> SourceInfo -> AstR
 mkAstAppAt astFn astArg = 
-  Ast $ ApplicationNode $ AstApplication astFn astArg
+  AstR $ AstApplication $ AstApplicationR astFn astArg
 
-getAstEndPos :: Ast -> SourcePos
+getAstEndPos :: AstR -> SourcePos
 getAstEndPos = getEndPos . getSrcInf
 
-getAstStartPos :: Ast -> SourcePos
+getAstStartPos :: AstR -> SourcePos
 getAstStartPos = getStartPos . getSrcInf
+
+pairifyAstList :: SourceInfo -> [AstR] -> AstR
+pairifyAstList srcInf asts =
+  case getAst folded of
+    AstPair pairAst ->
+      mkAstPairAt foldedFst foldedSnd srcInf
+      where
+        foldedFst = getFstAst pairAst
+        foldedSnd = getSndAst pairAst
+    _ ->
+      folded
+  where
+    folded = foldr mkAstPair (mkAstEmptyListAt srcInf) asts
+
+appifyAstList :: SourceInfo -> AstR -> [AstR] -> AstR
+appifyAstList srcInf astHead astRest =
+  case astRest of
+    [] ->
+      astHead
+    _ ->
+      case getAst folded of
+        AstApplication astApp ->
+          mkAstAppAt foldedFn foldedArg srcInf
+          where
+            foldedFn = getFnAst astApp
+            foldedArg = getArgAst astApp
+        _ ->
+          folded
+      where
+        folded = foldl mkAstApp astHead astRest
+    

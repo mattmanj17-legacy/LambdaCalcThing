@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Werror #-}
+{-# LANGUAGE MultiWayIf #-}
 
 import LambdaExpr
 import Control.Monad.Trans.Except
@@ -53,16 +54,17 @@ honkhonk x =
 
 flattenList :: Expr -> [Expr]
 flattenList expr =
-  case expr of
-    ExprPair {} ->
-      frst':flattenedSnd
-      where
-        frst' = getFstExpr expr
-        scnd' = getSndExpr expr
+  if| ExprReducible rexpr <- expr
+    , RexprPair rexprPair <- getReducibleExpr rexpr ->
+      let
+        frst' = getFstExpr rexprPair
+        scnd' = getSndExpr rexprPair
         flattenedSnd = flattenList scnd'
-    ExprEmptyList {} ->
+      in
+        frst':flattenedSnd
+    | ExprEmptyList <- expr ->
       []
-    _ ->
+    | otherwise ->
       [expr]
 
 replaceTabs :: String -> String
@@ -73,28 +75,30 @@ tests = do
   str <- lift $ lift $ readFile "test.txt"
   let cleanStr = replaceTabs str
   let fileLines = lines cleanStr
-  parsed <- parseFallible parseLambda "test.txt" cleanStr
+  parsed <- parseExceptT parseLambda "test.txt" cleanStr
   let compile = runReaderT $ runWriterT $ runExceptT $ anonLambda parsed
   compiled <- ExceptT $ WriterT $ compile fileLines
   let reduced = lambdaBetaReducedFull compiled
-  case reduced of
-    epair@(ExprPair {}) -> return $ (map runTest) (zip [0..] (flattenList epair))
-    _ -> throwE "test.txt did not evaluate to a list!!!"
+  if| ExprReducible rexpr <- reduced
+    , RexprPair {} <- getReducibleExpr rexpr ->
+      return $ (map runTest) (zip [0..] (flattenList reduced))
+    | otherwise ->
+      throwE "test.txt did not evaluate to a list!!!"
 
 runTest :: (Int, Expr) -> ExceptT String Maybe (Int, Expr, Expr)
 runTest (iTest, expr) =
-  if exprIsPair && sndIsPair && sndSndExprIsEmptyList then
-    if fstExpr == sndFstExpr then
-      lift Nothing
-    else
-      return (iTest, fstExpr, sndFstExpr)
-  else
-    throwE "expr was not a pair!!!"
-  where
-    exprIsPair = isExprPair expr
-    fstExpr = getFstExpr expr
-    sndExpr = getSndExpr expr
-    sndIsPair = isExprPair sndExpr
-    sndFstExpr = getFstExpr sndExpr
-    sndSndExpr = getSndExpr sndExpr
-    sndSndExprIsEmptyList = isExprEmptyList sndSndExpr
+  if| ExprReducible rexpr <- expr
+    , RexprPair rexprPair <- getReducibleExpr rexpr
+    , ExprReducible rexprSnd <- getSndExpr rexprPair
+    , RexprPair rexprPairSnd <- getReducibleExpr rexprSnd
+    , ExprEmptyList <- getSndExpr rexprPairSnd ->
+      let
+        fstExpr = getFstExpr rexprPair
+        sndFstExpr = getFstExpr rexprPairSnd
+      in
+        if fstExpr == sndFstExpr then
+          lift Nothing
+        else
+          return (iTest, fstExpr, sndFstExpr)
+    | otherwise ->
+      throwE "expr was not a pair!!!"

@@ -25,14 +25,14 @@ parseComment = do
   _ <- many (noneOf "\n")
   return ()
 
-parseLambda :: SimpleParser Ast
+parseLambda :: SimpleParser AstR
 parseLambda = do
   _ <- parseIgnore
   parsed <- parseId <|> parseList <|> parseApplication
   _ <- parseIgnore
   return parsed
 
-parseId :: SimpleParser Ast
+parseId :: SimpleParser AstR
 parseId = do
   posStart <- getPosition
   str <- many1 letter
@@ -40,15 +40,7 @@ parseId = do
   let astId = mkAstIdAt str $ SourceInfo posStart posEnd
   return astId
 
-listToPairs :: SourceInfo -> [Ast] -> Ast
-listToPairs srcInf list =
-  mkAstPairAt foldedFst foldedSnd srcInf
-  where
-    (PairNode folded) = getAstNode $ foldr mkAstPair (mkAstEmptyListAt srcInf) list
-    foldedFst = getFstAst folded
-    foldedSnd = getSndAst folded
-
-parseList :: SimpleParser Ast 
+parseList :: SimpleParser AstR 
 parseList = do
   posStart <- getPosition
   _ <- char '['
@@ -58,24 +50,18 @@ parseList = do
   _ <- char ']'
   posEnd <- getPosition
   let srcInf = SourceInfo posStart posEnd
-  return (listToPairs srcInf elems)
+  return (pairifyAstList srcInf elems)
 
-parseApplication :: SimpleParser Ast
+parseApplication :: SimpleParser AstR
 parseApplication = do
   posStart <- getPosition
   _ <- char '('
   _ <- parseIgnore
-  terms <- sepBy1 parseLambda parseIgnore
+  headTerm <- parseLambda
+  _ <- parseIgnore
+  restTerms <- sepBy1 parseLambda parseIgnore
   _ <- parseIgnore
   _ <- char ')'
   posEnd <- getPosition
   let srcInf = SourceInfo posStart posEnd
-  return (listToApps srcInf terms)
-
-listToApps :: SourceInfo -> [Ast] -> Ast
-listToApps srcInf list =
-  mkAstAppAt foldedFn foldedArg srcInf
-  where
-    (ApplicationNode folded) = getAstNode $ foldl1 mkAstApp list
-    foldedFn = getFnAst folded
-    foldedArg = getArgAst folded
+  return (appifyAstList srcInf headTerm restTerms)

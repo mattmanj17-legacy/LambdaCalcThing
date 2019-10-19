@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Werror #-}
-{-# LANGUAGE FlexibleContexts #-} -- Needed for the type of parseFallible
+{-# LANGUAGE FlexibleContexts #-} -- Needed for the type of parseExceptT
 
 module ParseCommon where
 
@@ -23,10 +23,10 @@ parseWhiteSpace1 a = do
   _ <- many1 (oneOf ['\x20','\x0D','\x0A','\x09'])
   return a
 
-parseFallible :: 
+parseExceptT :: 
   (Stream s Identity t, Monad m) => 
   Parsec s () a -> 
   SourceName -> 
   s -> 
   ExceptT String m a
-parseFallible parseFn file = (either (throwE . show) return) . (parse parseFn file)
+parseExceptT parseFn file = (either (throwE . show) return) . (parse parseFn file)
