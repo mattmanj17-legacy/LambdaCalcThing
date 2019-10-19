@@ -8,39 +8,42 @@ module ParseLambda
 where
 
 import Text.ParserCombinators.Parsec
+import Control.Monad.Trans.Except
 
 import ParseCommon
 
 import LambdaAst
 
-parseIgnore :: SimpleParser ()
+import Control.Monad.Trans.Class
+
+parseIgnore :: Monad m => SimpleParserT m ()
 parseIgnore = do
   _ <- many $ parseWhiteSpace1 () <|> parseComment
   return ()
 
-parseComment :: SimpleParser ()
+parseComment :: Monad m => SimpleParserT m ()
 parseComment = do
   _ <- char '-'
   _ <- char '-'
   _ <- many (noneOf "\n")
   return ()
 
-parseLambda :: SimpleParser AstR
+parseLambda :: Monad m => SimpleParserT (ExceptT String m) AstR
 parseLambda = do
   _ <- parseIgnore
   parsed <- parseId <|> parseList <|> parseApplication
   _ <- parseIgnore
   return parsed
 
-parseId :: SimpleParser AstR
+parseId :: Monad m => SimpleParserT (ExceptT String m) AstR
 parseId = do
   posStart <- getPosition
   str <- many1 letter
   posEnd <- getPosition
-  let astId = mkAstIdAt str $ SourceInfo posStart posEnd
-  return astId
+  srcInf <- lift $ mkSrcInfFromPoss posStart posEnd
+  return $ mkAstIdAt str srcInf
 
-parseList :: SimpleParser AstR 
+parseList :: Monad m => SimpleParserT (ExceptT String m) AstR 
 parseList = do
   posStart <- getPosition
   _ <- char '['
@@ -49,10 +52,10 @@ parseList = do
   _ <- parseIgnore
   _ <- char ']'
   posEnd <- getPosition
-  let srcInf = SourceInfo posStart posEnd
-  return (pairifyAstList srcInf elems)
+  srcInf <- lift $ mkSrcInfFromPoss posStart posEnd
+  lift $ pairifyAstList srcInf elems
 
-parseApplication :: SimpleParser AstR
+parseApplication :: Monad m => SimpleParserT (ExceptT String m) AstR
 parseApplication = do
   posStart <- getPosition
   _ <- char '('
@@ -63,5 +66,21 @@ parseApplication = do
   _ <- parseIgnore
   _ <- char ')'
   posEnd <- getPosition
-  let srcInf = SourceInfo posStart posEnd
-  return (appifyAstList srcInf headTerm restTerms)
+  srcInf <- lift $ mkSrcInfFromPoss posStart posEnd
+  lift $ appifyAstList srcInf headTerm restTerms
+
+mkSrcInfFromPoss :: Monad m => SourcePos -> SourcePos -> ExceptT String m SourceInfo
+mkSrcInfFromPoss posStart posEnd = do
+  srcInfStart <- mkSrcInfFromPos posStart
+  srcInfEnd <- mkSrcInfFromPos posEnd
+  mergeSrcInf srcInfStart srcInfEnd
+
+mkSrcInfFromPos :: Monad m => SourcePos -> ExceptT String m SourceInfo
+mkSrcInfFromPos pos =
+  mkSrcInf (sourceName pos) lineCol lineCol
+  where
+    lineCol = mkLineColFromPos pos
+
+mkLineColFromPos :: SourcePos -> LineColumn
+mkLineColFromPos =
+  LineColumn <$> sourceLine <*> sourceColumn

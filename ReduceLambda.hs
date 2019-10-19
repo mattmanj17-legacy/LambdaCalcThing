@@ -147,23 +147,17 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
           case getAst valScnd of
             AstEmptyList -> do
               transformed <- transformLetin defsScnd body
-              return $
-                appifyAstList
-                  (SourceInfo
-                    (getAstStartPos frstDefId)
-                    (getAstEndPos valFrst)
-                  )
-                  (mkAstIdAt 
-                    "fn"
-                    (SourceInfo
-                      (getAstStartPos frstDefId) 
-                      (getAstStartPos frstDefId)
-                    )
-                  )
-                  [ frstDefId
-                  , transformed
-                  , valFrst
-                  ]
+              newSrcInf <- mergeSrcInf (getSrcInf frstDefId) (getSrcInf valFrst)
+              appifyAstList
+                newSrcInf
+                (mkAstIdAt 
+                  "fn"
+                  (getSrcInf frstDefId)
+                )
+                [ frstDefId
+                , transformed
+                , valFrst
+                ]
             _ -> do
               errStr <- lift $ lift $ errorStrAt valScnd "unexpected value in def for letin : expected empty list"
               throwE errStr
@@ -221,8 +215,10 @@ replaceVarsInAppFnParamsPair reps fn (paramsFrst, paramsScnd, body) = do
       case getAst paramsScnd of
         AstEmptyList ->
           replaceVarsInAbsIdParam reps paramsFrst idStr body
-        _ -> 
-          replaceVarsInAbsIdParam reps paramsFrst idStr (mkAstApp (mkAstApp fn paramsScnd) body)
+        _ -> do 
+          app <- mkAstApp fn paramsScnd
+          nestedApp <- mkAstApp app body
+          replaceVarsInAbsIdParam reps paramsFrst idStr nestedApp
       where
         idStr = getIdStr astId
     _ -> do

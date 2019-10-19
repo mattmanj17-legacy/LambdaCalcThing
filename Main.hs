@@ -13,6 +13,8 @@ import Data.Bool
 import Control.Monad.Writer
 import Control.Monad.Reader
 
+import Util
+
 doIf :: Monad m => Bool -> m () -> m ()
 doIf cond action = if cond then do action else return ()
 
@@ -75,7 +77,7 @@ tests = do
   str <- lift $ lift $ readFile "test.txt"
   let cleanStr = replaceTabs str
   let fileLines = lines cleanStr
-  parsed <- parseExceptT parseLambda "test.txt" cleanStr
+  parsed <- flattenExceptT $ parseExceptT parseLambda "test.txt" cleanStr
   let compile = runReaderT $ runWriterT $ runExceptT $ anonLambda parsed
   compiled <- ExceptT $ WriterT $ compile fileLines
   let reduced = lambdaBetaReducedFull compiled

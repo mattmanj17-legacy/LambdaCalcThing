@@ -7,26 +7,28 @@ module ParseCommon where
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Prim
 
-import Data.Functor.Identity
-
 import Control.Monad.Trans.Except
 
-type SimpleParser result = GenParser Char () result
+import Control.Monad.Trans.Class
 
-parseWhiteSpace :: a -> SimpleParser a
+type SimpleParserT m result = ParsecT String () m result
+
+parseWhiteSpace :: Monad m => a -> SimpleParserT m a
 parseWhiteSpace a = do
   _ <- many (oneOf ['\x20','\x0D','\x0A','\x09'])
   return a
 
-parseWhiteSpace1 :: a -> SimpleParser a
+parseWhiteSpace1 :: Monad m => a -> SimpleParserT m a
 parseWhiteSpace1 a = do
   _ <- many1 (oneOf ['\x20','\x0D','\x0A','\x09'])
   return a
 
 parseExceptT :: 
-  (Stream s Identity t, Monad m) => 
-  Parsec s () a -> 
+  Monad m => 
+  SimpleParserT m a ->
   SourceName -> 
-  s -> 
+  String -> 
   ExceptT String m a
-parseExceptT parseFn file = (either (throwE . show) return) . (parse parseFn file)
+parseExceptT parseFn fileName fileStr = do
+  parsed <- lift $ runPT parseFn () fileName fileStr
+  either (throwE . show) return parsed

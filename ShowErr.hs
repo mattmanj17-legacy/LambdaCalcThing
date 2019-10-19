@@ -6,7 +6,6 @@ module ShowErr where
 import Util
 import LambdaAst
 import Control.Monad.Reader
-import Text.Parsec.Pos
 
 startRedHighlightAt :: Int -> String -> String
 startRedHighlightAt n = 
@@ -24,10 +23,8 @@ focusLines :: SourceInfo -> [String] -> [String]
 focusLines srcInf =
   (take cLineTake) . (drop cLineDrop)
   where
-    startPos = getStartPos srcInf
-    endPos = getEndPos srcInf
-    startLine = sourceLine startPos
-    endLine = sourceLine endPos
+    startLine = getStartLine srcInf
+    endLine = getEndLine srcInf
     cLineDrop = startLine - 1
     cLineTake = endLine - startLine + 1
 
@@ -35,10 +32,8 @@ highlightLinesFromSrcInf :: SourceInfo -> [String] -> [String]
 highlightLinesFromSrcInf srcInf fileLines =
   highlightLinesFromColumns startChar endChar focusedLines
   where
-    startPos = getStartPos srcInf
-    endPos = getEndPos srcInf
-    startChar = sourceColumn startPos
-    endChar = sourceColumn endPos
+    startChar = getStartColumn srcInf
+    endChar = getEndColumn srcInf
     focusedLines = focusLines srcInf fileLines
 
 errorStrAt :: 

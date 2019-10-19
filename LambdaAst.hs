@@ -3,25 +3,42 @@
 
 module LambdaAst where
 
-import Text.Parsec.Pos
+import Control.Monad.Trans.Except
+import Util
+import Data.Ord
+
+data LineColumn =
+  LineColumn
+    { getLineNumber :: Int
+    , getColumn :: Int
+    }
+  deriving(Eq)
+
+instance Show LineColumn where
+  show lineColumn =
+    line ++ ":" ++ column
+    where
+      line = show $ getLineNumber lineColumn
+      column = show $ getColumn lineColumn
+
+instance Ord LineColumn where
+  compare =
+    priCompareMany [comparing getLineNumber, comparing getColumn]
 
 data SourceInfo =
   SourceInfo
-    { getStartPos :: SourcePos
-    , getEndPos :: SourcePos
+    { getSourceName :: String
+    , getStart :: LineColumn
+    , getEnd :: LineColumn
     }
   deriving(Eq)
 
 instance Show SourceInfo where
   show srcInf = 
-    "<" ++ startLine ++ ":" ++ startChar ++ "-" ++ endLine ++ ":" ++ endChar ++ ">"
+    "<" ++ start ++ "-" ++ end ++ ">"
     where
-      startPos = getStartPos srcInf
-      startLine = show $ sourceLine startPos
-      startChar = show $ sourceColumn startPos
-      endPos = getEndPos srcInf
-      endLine = show $ sourceLine endPos
-      endChar = show $ sourceColumn endPos
+      start = show $ getStart srcInf
+      end = show $ getEnd srcInf
 
 data AstIdR = 
   AstIdR
@@ -85,17 +102,40 @@ data AstR =
 instance Show AstR where
   show = show . getAst
 
+mkSrcInf :: (Monad m) => String -> LineColumn -> LineColumn -> ExceptT String m SourceInfo
+mkSrcInf name start end =
+  if end < start then
+    throwE ("can not make a SourceInfo with start " ++ show start ++ " and end " ++ show end)
+  else
+    return $ SourceInfo name start end
+
+mergeSrcInf :: (Monad m) => SourceInfo -> SourceInfo -> ExceptT String m SourceInfo
+mergeSrcInf srcInfA srcInfB =
+  if nameA == nameB then
+    mkSrcInf nameA linColMin linColMax
+  else
+    throwE $ "can not merge source info from distinct sources " ++ nameA ++ " and " ++ nameB
+  where
+    nameA = getSourceName srcInfA
+    nameB = getSourceName srcInfB
+    linColMin = minimum $ map getStart [srcInfA, srcInfB]
+    linColMax = maximum $ map getEnd [srcInfA, srcInfB]
+
+mergeSrcInfFromAsts :: (Monad m) => AstR ->  AstR -> ExceptT String m SourceInfo
+mergeSrcInfFromAsts astA astB =
+  mergeSrcInf srcInfA srcInfB
+  where
+    srcInfA = getSrcInf astA
+    srcInfB = getSrcInf astB
+
 mkAstIdAt :: String -> SourceInfo -> AstR
 mkAstIdAt idStr =
   AstR $ AstId $ AstIdR idStr
 
-mkAstPair :: AstR -> AstR -> AstR
-mkAstPair astFst astSnd =
-  mkAstPairAt astFst astSnd srcInf
-  where
-    startPos = getAstStartPos astFst
-    endPos = getAstEndPos astSnd
-    srcInf = SourceInfo startPos endPos
+mkAstPair :: (Monad m) => AstR -> AstR -> ExceptT String m AstR
+mkAstPair astFst astSnd = do
+  srcInf <- mergeSrcInfFromAsts astFst astSnd
+  return $ mkAstPairAt astFst astSnd srcInf
 
 mkAstPairAt :: AstR -> AstR -> SourceInfo -> AstR
 mkAstPairAt astFst astSnd =
@@ -105,51 +145,63 @@ mkAstEmptyListAt :: SourceInfo -> AstR
 mkAstEmptyListAt = 
   AstR $ AstEmptyList
 
-mkAstApp :: AstR -> AstR -> AstR
-mkAstApp astFn astArg =
-  mkAstAppAt astFn astArg srcInf
-  where
-    startPos = getAstStartPos astFn
-    endPos = getAstEndPos astArg
-    srcInf = SourceInfo startPos endPos
+mkAstApp :: (Monad m) => AstR -> AstR -> ExceptT String m AstR
+mkAstApp astFn astArg = do
+  srcInf <- mergeSrcInfFromAsts astFn astArg
+  return $ mkAstAppAt astFn astArg srcInf
 
 mkAstAppAt :: AstR -> AstR -> SourceInfo -> AstR
 mkAstAppAt astFn astArg = 
   AstR $ AstApplication $ AstApplicationR astFn astArg
 
-getAstEndPos :: AstR -> SourcePos
-getAstEndPos = getEndPos . getSrcInf
+getStartLine :: SourceInfo -> Int
+getStartLine = getLineNumber . getStart
 
-getAstStartPos :: AstR -> SourcePos
-getAstStartPos = getStartPos . getSrcInf
+getEndLine :: SourceInfo -> Int
+getEndLine = getLineNumber . getEnd
 
-pairifyAstList :: SourceInfo -> [AstR] -> AstR
-pairifyAstList srcInf asts =
+getStartColumn :: SourceInfo -> Int
+getStartColumn = getColumn . getStart
+
+getEndColumn :: SourceInfo -> Int
+getEndColumn = getColumn . getEnd
+
+getAstStartLine :: AstR -> Int
+getAstStartLine = getStartLine . getSrcInf
+
+getAstStartColumn :: AstR -> Int
+getAstStartColumn = getStartColumn . getSrcInf
+
+getAstEndLine :: AstR -> Int
+getAstEndLine = getEndLine . getSrcInf
+
+getAstEndColumn :: AstR -> Int
+getAstEndColumn = getEndColumn . getSrcInf
+
+pairifyAstList :: (Monad m) => SourceInfo -> [AstR] -> ExceptT String m AstR
+pairifyAstList srcInf asts = do
+  folded <- foldrM mkAstPair (mkAstEmptyListAt srcInf) asts
   case getAst folded of
     AstPair pairAst ->
-      mkAstPairAt foldedFst foldedSnd srcInf
+      return $ mkAstPairAt foldedFst foldedSnd srcInf
       where
         foldedFst = getFstAst pairAst
         foldedSnd = getSndAst pairAst
     _ ->
-      folded
-  where
-    folded = foldr mkAstPair (mkAstEmptyListAt srcInf) asts
+      return folded
 
-appifyAstList :: SourceInfo -> AstR -> [AstR] -> AstR
-appifyAstList srcInf astHead astRest =
-  case astRest of
+appifyAstList :: (Monad m) => SourceInfo -> AstR -> [AstR] -> ExceptT String m AstR
+appifyAstList srcInf astHead astRest = do
+  folded <- foldlM mkAstApp astHead astRest
+  case astRest of -- have to tell if we ever actully ran mkAstApp. If not, return astHead unaltered
     [] ->
-      astHead
+      return astHead
     _ ->
       case getAst folded of
         AstApplication astApp ->
-          mkAstAppAt foldedFn foldedArg srcInf
+          return $ mkAstAppAt foldedFn foldedArg srcInf
           where
             foldedFn = getFnAst astApp
             foldedArg = getArgAst astApp
         _ ->
-          folded
-      where
-        folded = foldl mkAstApp astHead astRest
-    
+          return folded
