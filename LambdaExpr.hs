@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Werror #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE BangPatterns #-}
 
 module LambdaExpr where
 
@@ -92,11 +93,13 @@ mkExprArgRef :: Int -> Expr
 mkExprArgRef = ExprArgRef . ExprArgRefR
 
 mkExprPair :: Expr -> Expr -> Expr
-mkExprPair exprFst exprSnd = 
-  ExprReducible $ 
-  ExprReducibleR ((getIsExprFullyReduced exprFst) && (getIsExprFullyReduced exprSnd)) $ 
-  RexprPair $ 
+mkExprPair !exprFst !exprSnd = 
+  ExprReducible $! 
+  ExprReducibleR isFullyReduced $! 
+  RexprPair $! 
   RexprPairR exprFst exprSnd
+  where
+    !isFullyReduced = (getIsExprFullyReduced exprFst) && (getIsExprFullyReduced exprSnd)
 
 mkExprApp :: Expr -> Expr -> Expr
 mkExprApp exprFn exprArg = 
