@@ -5,30 +5,25 @@
 
 module ReduceLambda where
 
-import LambdaAst
-import LambdaExpr
+import Control.Monad.Reader
+import Control.Monad.Writer
 import Control.Monad.Trans.Except
+import Data.List
 import Data.Maybe
 
-import Control.Monad.Writer
-import Control.Monad.Reader
-
+import LambdaAst
+import LambdaExpr
 import ShowErr
 
-anonLambda :: 
+astToExpr :: 
   (Monad m) => 
   AstR -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-anonLambda = replaceVars []
-
-incReps :: 
-  [(String, Int)] -> 
-  [(String, Int)]
-incReps = map ((,) <$> fst <*> (+1) . snd)
+astToExpr = replaceVars []
 
 replaceVars :: 
   (Monad m) =>
-  [(String, Int)] -> 
+  [String] -> 
   AstR -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVars reps ast = do
@@ -45,18 +40,18 @@ replaceVars reps ast = do
 
 replaceVarsInId :: 
   (Monad m) => 
-  [(String, Int)] -> 
+  [String] -> 
   AstR -> 
   String -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInId reps astParent str = do
   lift $ tell ["replaceVarsInId " ++ show reps ++ " " ++ show astParent ++ " " ++ show str]
   errStr <- lift $ lift $ errorStrAt astParent ("unrecognized id " ++ str)
-  maybe (throwE errStr) (return . mkExprArgRef) (lookup str reps)
+  maybe (throwE errStr) (return . mkExprArgRef . (+1)) (elemIndex str reps)
 
 replaceVarsInPair :: 
   (Monad m) => 
-  [(String, Int)] -> 
+  [String] -> 
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInPair reps (astFirst, astSecond) = do
@@ -67,7 +62,7 @@ replaceVarsInPair reps (astFirst, astSecond) = do
 
 replaceVarsInApp :: 
   (Monad m) =>
-  [(String, Int)] -> 
+  [String] -> 
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInApp reps (replaceIn, replaceWith) = do
@@ -180,7 +175,7 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
 
 replaceVarsInAppFn :: 
   (Monad m) => 
-  [(String, Int)] -> 
+  [String] -> 
   AstR -> 
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
@@ -205,7 +200,7 @@ replaceVarsInAppFn reps fn (params, body) = do
 
 replaceVarsInAppFnParamsPair :: 
   (Monad m) =>
-  [(String, Int)] -> 
+  [String] -> 
   AstR -> 
   (AstR, AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
@@ -228,7 +223,7 @@ replaceVarsInAppFnParamsPair reps fn (paramsFrst, paramsScnd, body) = do
 
 replaceVarsInAppDefault :: 
   (Monad m) => 
-  [(String, Int)] -> 
+  [String] -> 
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
@@ -239,18 +234,18 @@ replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
 
 replaceVarsInAbsIdParam :: 
   (Monad m) => 
-  [(String, Int)] -> 
+  [String] -> 
   AstR -> 
   String -> 
   AstR -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAbsIdParam reps astId str body = do
   lift $ tell ["replaceVarsInAbsIdParam " ++ show reps ++ " " ++ show astId ++ " " ++ show str ++ " " ++ show body]
-  if isJust $ lookup str reps then do
+  if isJust $ elemIndex str reps then do
     errStr <- lift $ lift $ errorStrAt astId "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
     throwE errStr 
   else do
-    let newreps = (str, 1):(incReps reps)
+    let newreps = str:reps
     newBody <- replaceVars newreps body
     return (mkExprAbstraction newBody)
 

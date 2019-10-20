@@ -78,7 +78,7 @@ tests = do
   let cleanStr = replaceTabs str
   let fileLines = lines cleanStr
   parsed <- flattenExceptT $ parseExceptT parseLambda "test.txt" cleanStr
-  let compile = runReaderT $ runWriterT $ runExceptT $ anonLambda parsed
+  let compile = runReaderT $ runWriterT $ runExceptT $ astToExpr parsed
   compiled <- ExceptT $ WriterT $ compile fileLines
   let reduced = lambdaBetaReducedFull compiled
   if| ExprReducible rexpr <- reduced
