@@ -12,7 +12,6 @@
 				"*.chs.h",
 				"*.dyn_o",
 				"*.dyn_hi",
-				"*.prof",
 				"*.aux",
 				"*.hp",
 				"*.eventlog",

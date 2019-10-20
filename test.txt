@@ -264,7 +264,7 @@
 		[(ack two three) (mult three three)]
 		[(ack two four) (add (add four four) three)]
 
-		--[(ack three zero) (succ four)]
+		[(ack three zero) (succ four)]
 		--[(ack three one) (succ (mult four three))]
 		--[(ack three two) (add (pow (succ four) two) four)]
 		--[(ack three three) (succ (mult (mult (succ four) two) (add three three)))]
