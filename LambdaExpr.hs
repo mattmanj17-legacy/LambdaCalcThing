@@ -122,6 +122,8 @@ mkExprApp exprFn exprArg =
 mkExprAbstraction :: Expr -> Expr
 mkExprAbstraction exprBody = 
   ExprReducible $ 
-  ExprReducibleR (getIsExprFullyReduced exprBody) $ 
+  ExprReducibleR isFullyReduced $ 
   RexprAbstraction $ 
   RexprAbstractionR exprBody
+  where
+    isFullyReduced = getIsExprFullyReduced exprBody

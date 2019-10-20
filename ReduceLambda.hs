@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Werror #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE BangPatterns #-}
 
 module ReduceLambda where
 
