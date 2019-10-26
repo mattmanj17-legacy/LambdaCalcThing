@@ -21,13 +21,18 @@ astToExpr ::
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 astToExpr = replaceVars []
 
+logA :: 
+  (MonadTrans t, Monad m) =>
+  a -> t (WriterT [a] m) ()
+logA = lift . tell . (:[])
+
 replaceVars :: 
   (Monad m) =>
   [String] -> 
   AstR -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVars reps ast = do
-  lift $ tell ["replaceVars in " ++ show ast]
+  logA $ "replaceVars in " ++ show ast
   case getAst ast of
     AstId astId -> 
       replaceVarsInId reps ast (getIdStr astId)
@@ -45,7 +50,7 @@ replaceVarsInId ::
   String -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInId reps astParent str = do
-  lift $ tell ["replaceVarsInId " ++ show reps ++ " " ++ show astParent ++ " " ++ show str]
+  logA $ "replaceVarsInId " ++ show reps ++ " " ++ show astParent ++ " " ++ show str
   errStr <- lift $ lift $ errorStrAt astParent ("unrecognized id " ++ str)
   maybe (throwE errStr) (return . mkExprArgRef . (+1)) (elemIndex str reps)
 
@@ -55,7 +60,7 @@ replaceVarsInPair ::
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInPair reps (astFirst, astSecond) = do
-  lift $ tell ["replaceVarsInPair " ++ show reps ++ " " ++ show astFirst ++ " " ++ show astSecond]
+  logA $ "replaceVarsInPair " ++ show reps ++ " " ++ show astFirst ++ " " ++ show astSecond
   newFrst <- replaceVars reps astFirst
   newScnd <- replaceVars reps astSecond
   return $ mkExprPair newFrst newScnd
@@ -66,7 +71,7 @@ replaceVarsInApp ::
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInApp reps (replaceIn, replaceWith) = do
-  lift $ tell ["replaceVarsInApp " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith]
+  logA $ "replaceVarsInApp " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith
   let defaultReplacement = replaceVarsInAppDefault reps (replaceIn, replaceWith)
   if| (AstApplication astApp) <- getAst replaceIn
     , (AstId astId) <- getAst $ getFnAst astApp ->
@@ -87,7 +92,7 @@ transformLetin ::
   AstR ->
   ExceptT String (WriterT [String] (ReaderT [String] m)) AstR
 transformLetin defs body = do
-  lift $ tell ["transformLetin " ++ show defs ++ " " ++ show body]
+  logA $ "transformLetin " ++ show defs ++ " " ++ show body
   case getAst defs of
     AstId {} -> do
       errStr <- lift $ lift $ errorStrAt defs "letin does not expect an id as its first argument"
@@ -107,7 +112,7 @@ transformLetinPairDefs ::
   AstR ->
   ExceptT String (WriterT [String] (ReaderT [String] m)) AstR
 transformLetinPairDefs defsFrst defsScnd body = do
-  lift $ tell ["transformLetinPairDefs " ++ show defsFrst ++ " " ++ show defsScnd ++ " " ++ show body]
+  logA $ "transformLetinPairDefs " ++ show defsFrst ++ " " ++ show defsScnd ++ " " ++ show body
   case getAst defsFrst of
     AstId {} -> do
       errStr <- lift $ lift $ errorStrAt defsFrst "unexpected id in defs list for letin"
@@ -129,7 +134,7 @@ transformLetinPairDef ::
   AstR ->
   ExceptT String (WriterT [String] (ReaderT [String] m)) AstR
 transformLetinPairDef frstDefId frstDefValue defsScnd body = do
-  lift $ tell ["transformLetinPairDef " ++ show frstDefId ++ " " ++ show frstDefValue ++ " " ++ show defsScnd ++ " " ++ show body]
+  logStr $ ["transformLetinPairDef " ++ show frstDefId ++ " " ++ show frstDefValue ++ " " ++ show defsScnd ++ " " ++ show body
   case getAst frstDefId of
     AstId {} -> do
       case getAst frstDefValue of
@@ -180,7 +185,7 @@ replaceVarsInAppFn ::
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAppFn reps fn (params, body) = do
-  lift $ tell ["replaceVarsInAppFn " ++ show reps ++ " " ++ show params ++ " " ++ show body]
+  logStr $ "replaceVarsInAppFn " ++ show reps ++ " " ++ show params ++ " " ++ show body
   case getAst params of
     AstId astId ->
       replaceVarsInAbsIdParam reps params idStr body
@@ -205,7 +210,7 @@ replaceVarsInAppFnParamsPair ::
   (AstR, AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAppFnParamsPair reps fn (paramsFrst, paramsScnd, body) = do
-  lift $ tell ["replaceVarsInAppFnParamsPair " ++ show reps ++ " " ++ show paramsFrst ++ " " ++ show paramsScnd ++ " " ++ show body]
+  logStr $ "replaceVarsInAppFnParamsPair " ++ show reps ++ " " ++ show paramsFrst ++ " " ++ show paramsScnd ++ " " ++ show body
   case getAst paramsFrst of
     AstId astId ->
       case getAst paramsScnd of
@@ -227,7 +232,7 @@ replaceVarsInAppDefault ::
   (AstR, AstR) -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
-  lift $ tell ["replaceVarsInAppDefault " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith]
+  logStr $ "replaceVarsInAppDefault " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith
   fnReplaced <- replaceVars reps replaceIn
   argReplaced <- replaceVars reps replaceWith
   return $ mkExprApp fnReplaced argReplaced
@@ -240,7 +245,7 @@ replaceVarsInAbsIdParam ::
   AstR -> 
   ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
 replaceVarsInAbsIdParam reps astId str body = do
-  lift $ tell ["replaceVarsInAbsIdParam " ++ show reps ++ " " ++ show astId ++ " " ++ show str ++ " " ++ show body]
+  logStr $ "replaceVarsInAbsIdParam " ++ show reps ++ " " ++ show astId ++ " " ++ show str ++ " " ++ show body
   if isJust $ elemIndex str reps then do
     errStr <- lift $ lift $ errorStrAt astId "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
     throwE errStr 
