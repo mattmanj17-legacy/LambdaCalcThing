@@ -79,7 +79,7 @@ tests = do
   let fileLines = lines cleanStr
   parsed <- flattenExceptT $ parseExceptT parseLambda "test.txt" cleanStr
   let compile = runReaderT $ runWriterT $ runExceptT $ astToExpr parsed
-  compiled <- ExceptT $ WriterT $ compile fileLines
+  compiled <- ExceptT $ WriterT $ compile (ReplaceVarsEnv fileLines [])
   let reduced = lambdaBetaReducedFull compiled
   if| ExprReducible rexpr <- reduced
     , RexprPair {} <- getReducibleExpr rexpr ->

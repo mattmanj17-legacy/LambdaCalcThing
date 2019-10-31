@@ -18,69 +18,78 @@ import ShowErr
 astToExpr :: 
   (Monad m) => 
   AstR -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-astToExpr = replaceVars []
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+astToExpr = replaceVars
 
 logA :: 
   (MonadTrans t, Monad m) =>
   a -> t (WriterT [a] m) ()
 logA = lift . tell . (:[])
 
+data ReplaceVarsEnv = 
+  ReplaceVarsEnv 
+    { getFileLines :: [String]
+    , getReps :: [String]
+    }
+
 replaceVars :: 
-  (Monad m) =>
-  [String] -> 
+  (Monad m) => 
   AstR -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVars reps ast = do
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVars ast = do
   logA $ "replaceVars in " ++ show ast
   case getAst ast of
     AstId astId -> 
-      replaceVarsInId reps ast (getIdStr astId)
+      replaceVarsInId ast (getIdStr astId)
     AstPair astPair -> 
-      replaceVarsInPair reps (getFstAst astPair, getSndAst astPair)
+      replaceVarsInPair (getFstAst astPair, getSndAst astPair)
     AstApplication astApp -> 
-      replaceVarsInApp reps (getFnAst astApp, getArgAst astApp)
+      replaceVarsInApp (getFnAst astApp, getArgAst astApp)
     AstEmptyList -> do
       return ExprEmptyList
 
 replaceVarsInId :: 
   (Monad m) => 
-  [String] -> 
   AstR -> 
   String -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVarsInId reps astParent str = do
-  logA $ "replaceVarsInId " ++ show reps ++ " " ++ show astParent ++ " " ++ show str
-  errStr <- lift $ lift $ errorStrAt astParent ("unrecognized id " ++ str)
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVarsInId astParent str = do
+  logA $ "replaceVarsInId " ++ show astParent ++ " " ++ show str
+  errStr <- lift $ lift $ withReaderT getFileLines $ errorStrAt astParent ("unrecognized id " ++ str)
+  reps <- asks getReps
   maybe (throwE errStr) (return . mkExprArgRef . (+1)) (elemIndex str reps)
 
 replaceVarsInPair :: 
   (Monad m) => 
-  [String] -> 
   (AstR, AstR) -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVarsInPair reps (astFirst, astSecond) = do
-  logA $ "replaceVarsInPair " ++ show reps ++ " " ++ show astFirst ++ " " ++ show astSecond
-  newFrst <- replaceVars reps astFirst
-  newScnd <- replaceVars reps astSecond
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVarsInPair (astFirst, astSecond) = do
+  logA $ "replaceVarsInPair " ++ show astFirst ++ " " ++ show astSecond
+  newFrst <- replaceVars astFirst
+  newScnd <- replaceVars astSecond
   return $ mkExprPair newFrst newScnd
 
 replaceVarsInApp :: 
   (Monad m) =>
-  [String] -> 
   (AstR, AstR) -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVarsInApp reps (replaceIn, replaceWith) = do
-  logA $ "replaceVarsInApp " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith
-  let defaultReplacement = replaceVarsInAppDefault reps (replaceIn, replaceWith)
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVarsInApp (replaceIn, replaceWith) = do
+  logA $ "replaceVarsInApp " ++ show replaceIn ++ " " ++ show replaceWith
+  let defaultReplacement = replaceVarsInAppDefault (replaceIn, replaceWith)
   if| (AstApplication astApp) <- getAst replaceIn
     , (AstId astId) <- getAst $ getFnAst astApp ->
       case getIdStr astId of
         "fn" -> 
-          replaceVarsInAppFn reps (getFnAst astApp) ((getArgAst astApp), replaceWith)
+          replaceVarsInAppFn (getFnAst astApp) ((getArgAst astApp), replaceWith)
         "letin" -> do
-          transformed <- transformLetin (getArgAst astApp) replaceWith
-          replaceVars reps transformed
+          transformed <- 
+            ExceptT $ 
+            WriterT $ 
+            withReaderT getFileLines $ 
+            runWriterT $ 
+            runExceptT $ 
+            transformLetin (getArgAst astApp) replaceWith
+          replaceVars transformed
         _ ->
           defaultReplacement
     | otherwise -> 
@@ -134,7 +143,7 @@ transformLetinPairDef ::
   AstR ->
   ExceptT String (WriterT [String] (ReaderT [String] m)) AstR
 transformLetinPairDef frstDefId frstDefValue defsScnd body = do
-  logStr $ ["transformLetinPairDef " ++ show frstDefId ++ " " ++ show frstDefValue ++ " " ++ show defsScnd ++ " " ++ show body
+  logA $ "transformLetinPairDef " ++ show frstDefId ++ " " ++ show frstDefValue ++ " " ++ show defsScnd ++ " " ++ show body
   case getAst frstDefId of
     AstId {} -> do
       case getAst frstDefValue of
@@ -179,79 +188,79 @@ transformLetinPairDef frstDefId frstDefValue defsScnd body = do
       throwE errStr
 
 replaceVarsInAppFn :: 
-  (Monad m) => 
-  [String] -> 
+  (Monad m) =>  
   AstR -> 
   (AstR, AstR) -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVarsInAppFn reps fn (params, body) = do
-  logStr $ "replaceVarsInAppFn " ++ show reps ++ " " ++ show params ++ " " ++ show body
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVarsInAppFn fn (params, body) = do
+  logA $ "replaceVarsInAppFn " ++ show params ++ " " ++ show body
   case getAst params of
     AstId astId ->
-      replaceVarsInAbsIdParam reps params idStr body
+      replaceVarsInAbsIdParam params idStr body
       where
         idStr = getIdStr astId
     AstPair astPair ->
-      replaceVarsInAppFnParamsPair reps fn (frst, scnd, body)
+      replaceVarsInAppFnParamsPair fn (frst, scnd, body)
       where
         frst = getFstAst astPair
         scnd = getSndAst astPair
     AstEmptyList -> do
-      errStr <- lift $ lift $ errorStrAt params "empty params list for fn"
+      errStr <- lift $ lift $ withReaderT getFileLines $ errorStrAt params "empty params list for fn"
       throwE errStr
     _ -> do
-      errStr <- lift $ lift $ errorStrAt params ("ill formed params list " ++ show params)
+      errStr <- lift $ lift $ withReaderT getFileLines $ errorStrAt params ("ill formed params list " ++ show params)
       throwE errStr
 
 replaceVarsInAppFnParamsPair :: 
   (Monad m) =>
-  [String] -> 
   AstR -> 
   (AstR, AstR, AstR) -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVarsInAppFnParamsPair reps fn (paramsFrst, paramsScnd, body) = do
-  logStr $ "replaceVarsInAppFnParamsPair " ++ show reps ++ " " ++ show paramsFrst ++ " " ++ show paramsScnd ++ " " ++ show body
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVarsInAppFnParamsPair fn (paramsFrst, paramsScnd, body) = do
+  logA $ "replaceVarsInAppFnParamsPair " ++ show paramsFrst ++ " " ++ show paramsScnd ++ " " ++ show body
   case getAst paramsFrst of
     AstId astId ->
       case getAst paramsScnd of
         AstEmptyList ->
-          replaceVarsInAbsIdParam reps paramsFrst idStr body
+          replaceVarsInAbsIdParam paramsFrst idStr body
         _ -> do 
           app <- mkAstApp fn paramsScnd
           nestedApp <- mkAstApp app body
-          replaceVarsInAbsIdParam reps paramsFrst idStr nestedApp
+          replaceVarsInAbsIdParam paramsFrst idStr nestedApp
       where
         idStr = getIdStr astId
     _ -> do
-      errStr <- lift $ lift $ errorStrAt paramsFrst "non id in params list for fn"
+      errStr <- lift $ lift $ withReaderT getFileLines $ errorStrAt paramsFrst "non id in params list for fn"
       throwE errStr 
 
 replaceVarsInAppDefault :: 
   (Monad m) => 
-  [String] -> 
   (AstR, AstR) -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVarsInAppDefault reps (replaceIn, replaceWith) = do
-  logStr $ "replaceVarsInAppDefault " ++ show reps ++ " " ++ show replaceIn ++ " " ++ show replaceWith
-  fnReplaced <- replaceVars reps replaceIn
-  argReplaced <- replaceVars reps replaceWith
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVarsInAppDefault (replaceIn, replaceWith) = do
+  logA $ "replaceVarsInAppDefault " ++ show replaceIn ++ " " ++ show replaceWith
+  fnReplaced <- replaceVars replaceIn
+  argReplaced <- replaceVars replaceWith
   return $ mkExprApp fnReplaced argReplaced
 
+prependRepToEnv :: String -> ReplaceVarsEnv -> ReplaceVarsEnv
+prependRepToEnv str env =
+  ReplaceVarsEnv (getFileLines env) (str:(getReps env))
+
 replaceVarsInAbsIdParam :: 
-  (Monad m) => 
-  [String] -> 
+  (Monad m) =>  
   AstR -> 
   String -> 
   AstR -> 
-  ExceptT String (WriterT [String] (ReaderT [String] m)) Expr
-replaceVarsInAbsIdParam reps astId str body = do
-  logStr $ "replaceVarsInAbsIdParam " ++ show reps ++ " " ++ show astId ++ " " ++ show str ++ " " ++ show body
+  ExceptT String (WriterT [String] (ReaderT ReplaceVarsEnv m)) Expr
+replaceVarsInAbsIdParam astId str body = do
+  logA $ "replaceVarsInAbsIdParam " ++ show astId ++ " " ++ show str ++ " " ++ show body
+  reps <- asks getReps
   if isJust $ elemIndex str reps then do
-    errStr <- lift $ lift $ errorStrAt astId "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
+    errStr <- lift $ lift $ withReaderT getFileLines $ errorStrAt astId "replaceVarsInAbsIdParam blew up because we were going to shadow a param"
     throwE errStr 
   else do
-    let newreps = str:reps
-    newBody <- replaceVars newreps body
+    newBody <- local (prependRepToEnv str) $ replaceVars body
     return (mkExprAbstraction newBody)
 
 -- REDUX
